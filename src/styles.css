@@ -63,3 +63,26 @@
   .map-toolbar .row{gap:4px}.segmented button{font-size:10px;padding:8px 10px}
   .detail>.row:last-child>.info,.detail .gold{flex-basis:100%;width:100%}
 }
+
+/* Map first: letters appear only after entering their discovery radius. */
+.detail:empty,.proximity-hint:empty{display:none}
+.proximity-hint{position:absolute;bottom:48px;left:28px;right:28px;z-index:1;margin:0 auto;max-width:540px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:#152b31f5;border:1px solid #d5d6b72b;border-radius:16px;color:var(--muted);font-size:12px}
+.proximity-hint .secondary{flex-shrink:0}
+@media(max-width:700px){
+ .view-explore:not(.list-mode){height:100dvh;min-height:0;display:flex;flex-direction:column;padding-bottom:calc(68px + var(--safe))}
+ .view-explore:not(.list-mode) .panel{flex:none;padding:12px 16px}
+ .view-explore:not(.list-mode) .explore-brand{margin:0}
+ .view-explore:not(.list-mode) .panel h1{display:none}
+ .view-explore:not(.list-mode) .panel>.mobile-switch{bottom:5px;right:12px;min-height:36px;min-width:36px;padding:8px}
+ .view-explore:not(.list-mode) .map-pane{flex:1;min-height:0;position:relative;padding:0;display:block;overflow:hidden}
+ .view-explore:not(.list-mode) .map-canvas{position:absolute;inset:0;height:auto;width:100%;border:0;border-radius:0}
+ .view-explore:not(.list-mode) .map-toolbar{position:absolute;top:12px;left:12px;right:12px}
+ .view-explore:not(.list-mode) .map-label{position:absolute;top:72px;left:16px;right:16px}
+ .view-explore:not(.list-mode) .map-connect{position:absolute;top:98px;left:12px;right:auto;max-width:calc(100% - 24px);padding:7px 10px;font-size:10px;gap:12px}
+ .view-explore:not(.list-mode) .map-connect button{font-size:10px}
+ .view-explore:not(.list-mode) .proximity-hint{position:absolute;bottom:24px;left:12px;right:12px;font-size:11px;padding:10px 12px}
+ .view-explore:not(.list-mode) .detail{position:absolute;left:12px;right:12px;bottom:24px;width:auto;max-height:48%;overflow:auto;padding:14px}
+ .view-explore:not(.list-mode) .detail-heading,.view-explore:not(.list-mode) .detail-meta,.view-explore:not(.list-mode) .detail .teaser{display:none}
+ .view-explore:not(.list-mode) .detail h2{font-size:21px;margin:0 0 10px}
+ .view-explore:not(.list-mode) .map-credit{position:absolute;bottom:5px;right:12px}
+}
