@@ -1,0 +1,6 @@
+{
+  "name":"midnight-letters","version":"0.2.0","private":true,"type":"module",
+  "description":"Location-based letters, built for the web with a mobile roadmap.",
+  "scripts":{"dev":"node scripts/dev.mjs","build":"node scripts/build.mjs","test":"node --test","native:sync":"npm run build && cap sync","native:ios":"cap open ios","native:android":"cap open android"},
+  "engines":{"node":">=22"}
+}

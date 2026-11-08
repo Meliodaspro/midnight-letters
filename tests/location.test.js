@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {distanceMeters,canUnlock} from '../src/core/location.js';import {messages} from '../src/i18n.js';
+test('distance is zero at the same point and ~111 km per degree at equator',()=>{assert.equal(distanceMeters({lat:0,lng:0},{lat:0,lng:0}),0);assert.ok(Math.abs(distanceMeters({lat:0,lng:0},{lat:0,lng:1})-111195)<2)});
+test('unlock rejects distant, inaccurate and expired fixes',()=>{const place={lat:21.028,lng:105.85};const fix={...place,accuracy:10,timestamp:Date.now()};assert.equal(canUnlock(fix,place),true);assert.equal(canUnlock({...fix,accuracy:51},place),false);assert.equal(canUnlock({...fix,timestamp:Date.now()-61000},place),false);assert.equal(canUnlock({...fix,lat:21.03},place),false);assert.equal(canUnlock(null,place),false)});
+test('both interface languages cover the same keys',()=>assert.deepEqual(Object.keys(messages.vi).sort(),Object.keys(messages.en).sort()));
