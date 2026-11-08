@@ -15,3 +15,51 @@
 /* Readability and narrow-screen finishing. */
 .card-copy .place{font-size:10px}.letter-card h3{font-size:17px}.letter-card p{font-size:11px}.letter-card .meta{font-size:10px}.card-action{font-size:9px}.topic-label{font-size:10px}.compose-paper label{font-size:12px}.compose-paper input,.compose-paper select{font-size:13px}.compose-paper textarea{font-size:14px}.modal-content{scrollbar-width:thin;scrollbar-color:#86978155 transparent}.modal-content::-webkit-scrollbar{width:4px}.modal-content::-webkit-scrollbar-thumb{background:#86978155;border-radius:6px}
 @media(max-width:700px){.view-explore .panel h1{white-space:pre-line;max-width:265px;font-size:25px}.marker span{width:130px;max-width:130px;left:50%;transform:translateX(-50%);font-size:9px;white-space:normal}.letter-card .meta{font-size:10px}.card-action{font-size:9px}.topic-label{font-size:10px}.card-copy .place{font-size:10px}.list-mode .card-copy p{font-size:12px}.compose-paper label{font-size:11px}.compose-paper input,.compose-paper select{font-size:12px}.compose-paper textarea{font-size:14px}.paper .letter-body{font-size:15px;line-height:2.05}.paper .actions button{font-size:10px}.detail-heading .place{font-size:9px}.detail .info{font-size:9px}.detail-meta .info{font-size:8px}.setting-row{font-size:12px}.setting-row small{font-size:10px}.stat span{font-size:11px}.profile-card p{font-size:10px}.nav button{font-size:10px}.full-page .sub{font-size:12px}}
+
+
+/* Keep the map and letter in separate layout regions on small screens. */
+.map-canvas{position:absolute;inset:0;overflow:hidden}
+.sample-pins{position:absolute;inset:0}
+@media(max-width:700px){
+  .shell{height:auto;min-height:100dvh;padding-bottom:calc(76px + var(--safe))}
+  .view-explore:not(.list-mode) .panel{position:relative;height:auto;min-height:0;padding:20px 20px 16px;background:var(--bg);pointer-events:auto;overflow:visible}
+  .view-explore .explore-brand{margin-bottom:12px}
+  .view-explore:not(.list-mode) .panel h1{font-size:26px;line-height:1.35;white-space:normal;max-width:calc(100% - 56px);margin:0}
+  .view-explore .panel>.mobile-switch{top:auto;bottom:19px;right:20px;min-width:44px;min-height:44px;align-items:center;justify-content:center;padding:10px}
+  .view-explore:not(.list-mode) .map-pane{height:auto;display:flex;flex-direction:column;overflow:visible;padding:0 16px 16px;background:var(--bg);gap:12px}
+  .map-toolbar{position:relative;inset:auto;flex:none;gap:8px;min-width:0}
+  .segmented{min-width:0}.segmented button{min-height:40px;font-size:11px;padding:8px 12px}
+  .map-toolbar .icon-button{width:42px;height:42px;min-width:42px;min-height:42px}
+  .map-label{position:relative;inset:auto;padding:0 4px;border:0;max-width:none}
+  .map-label .status{margin:0;font-size:10px}
+  .map-connect{position:relative;inset:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;max-width:none;padding:10px 12px;font-size:11px}
+  .map-connect[hidden]{display:none}.map-connect button{font-size:11px;padding:4px 0;min-height:32px}
+  .map-canvas{position:relative;inset:auto;height:260px;flex:none;border:1px solid var(--line);border-radius:20px;isolation:isolate}
+  .lake{top:8%;left:26%;height:82%;width:46%}
+  .marker{width:40px;height:40px}.marker span{font-size:10px;line-height:1.4;width:106px;max-width:106px;top:47px}
+  .marker.me{box-shadow:0 0 0 14px #e5ca970b,0 0 0 28px #e5ca9706}
+  .detail{position:relative;inset:auto;max-width:none;width:100%;margin:0;padding:18px;border-radius:20px;backdrop-filter:none;box-shadow:0 8px 24px #0002}
+  .detail-grip{display:none}.detail-heading{display:flex;margin-bottom:12px;padding-bottom:12px}
+  .detail-heading .eyebrow{font-size:9px}.detail-heading .place{font-size:11px}
+  .detail-meta{flex-wrap:wrap}.detail-meta .eyebrow{font-size:9px}.detail-meta .info{font-size:10px}
+  .detail h2{font-size:23px;margin:10px 0;overflow-wrap:anywhere}
+  .detail .teaser{font-size:13px;line-height:1.8;display:block;overflow:visible;margin-bottom:16px}
+  .detail>.row:last-child{flex-wrap:wrap;gap:12px;padding-top:14px}
+  .detail>.row:last-child>.info{max-width:none;flex:1 1 120px;font-size:11px;overflow-wrap:anywhere}
+  .detail .gold{min-height:44px;font-size:12px;padding:11px 16px;flex:0 0 auto}
+  .map-credit{position:relative;inset:auto;text-align:right;font-size:9px}
+  .nav{height:calc(68px + var(--safe));border-radius:18px 18px 0 0;padding:4px 8px calc(4px + var(--safe))}
+  .nav button{min-height:52px;flex:1;max-width:96px;width:auto;font-size:10px;padding:7px 2px}
+  .nav button .icon{margin-bottom:3px}
+  .list-mode .panel,.full-page .panel{height:auto;min-height:calc(100dvh - 76px - var(--safe));overflow:visible}
+  .list-mode .map-pane{display:none}
+  .list-mode .panel>.mobile-switch{top:52px;bottom:auto}
+  .full-page input,.full-page textarea,.full-page select,.modal-content input{font-size:16px}
+  .setting-row{flex-wrap:wrap}.setting-row>span{min-width:0}
+}
+@media(max-width:360px){
+  .view-explore:not(.list-mode) .panel{padding-left:16px;padding-right:16px}
+  .view-explore:not(.list-mode) .panel h1{font-size:23px}
+  .map-toolbar .row{gap:4px}.segmented button{font-size:10px;padding:8px 10px}
+  .detail>.row:last-child>.info,.detail .gold{flex-basis:100%;width:100%}
+}
