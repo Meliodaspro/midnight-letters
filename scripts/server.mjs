@@ -115,7 +115,7 @@ const server = createServer(async (req,res) => {
    try{
     const model=(process.env.GEMINI_MODEL||'gemini-3.8-flash').replace(/^models\//,'');
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
-     method:'POST',signal:AbortSignal.timeout(11000),
+     method:'POST',signal:AbortSignal.timeout(30000),
      headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
      body:JSON.stringify({
       systemInstruction:{parts:[{text:'Write one warm, original letter for a stranger to discover. Use one concrete image and a gentle thought. Avoid cliches, insults and invented facts about the reader. Title at most 80 characters. Body 2–3 short paragraphs, at most 130 words.'}]},
