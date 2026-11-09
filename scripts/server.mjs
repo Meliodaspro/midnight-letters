@@ -113,7 +113,7 @@ const server = createServer(async (req,res) => {
    if(!reservation.changes)return respond(res,429,{error:'ai_wait'});
    activeSuggestions++;
    try{
-    const model=(process.env.GEMINI_MODEL||'gemini-3.8-flash').replace(/^models\//,'');
+    const model=(process.env.GEMINI_MODEL||'gemini-3.1-flash-lite').replace(/^models\//,'');
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
      method:'POST',signal:AbortSignal.timeout(30000),
      headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
@@ -123,8 +123,8 @@ const server = createServer(async (req,res) => {
       generationConfig:{
        responseMimeType:'application/json',
        responseSchema:{type:'OBJECT',required:['title','body'],properties:{title:{type:'STRING'},body:{type:'STRING'}}},
-       maxOutputTokens:4096,
-       ...(model.startsWith('gemini-2.5-flash')?{thinkingConfig:{thinkingBudget:0}}:{})
+       maxOutputTokens:1024,
+       ...(model.startsWith('gemini-2.5-flash')?{thinkingConfig:{thinkingBudget:0}}:model==='gemini-3.1-flash-lite'?{thinkingConfig:{thinkingLevel:'MINIMAL'}}:{})
       }
      })
     });
