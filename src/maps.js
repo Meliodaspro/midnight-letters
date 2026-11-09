@@ -1,3 +1,4 @@
+import {distanceMeters} from './core/location.js';
 const STYLE_URL='https://tiles.openfreemap.org/styles/liberty';
 const CDN='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/';
 let sdk, instance, pending, resizeObserver, userMarker;
@@ -103,16 +104,35 @@ export async function connectMap(container,letters,onSelect){
  return pending;
 }
 
+export function groupLettersByPlace(letters){
+ const groups=[];
+ for(const letter of letters){
+  const group=groups.find(group=>distanceMeters(group[0],letter)<=15);
+  if(group)group.push(letter);
+  else groups.push([letter]);
+ }
+ return groups;
+}
+
 export function refreshMarkers(letters,onSelect){
  if(!instance)return;
  markers.forEach(marker=>marker.remove());
- markers=letters.map(letter=>{
+ markers=groupLettersByPlace(letters).map(group=>{
+  const [letter]=group;
   const button=document.createElement('button');
   button.type='button';
   button.className='storybook-pin';
   button.setAttribute('aria-label',letter.place||letter.title);
   button.innerHTML='<svg width="30" height="24" viewBox="0 0 30 24" aria-hidden="true"><rect x="2" y="3" width="26" height="18" rx="4" fill="#fff7df" stroke="#8b7051" stroke-width="2"/><path d="m3 5 12 9L27 5" fill="none" stroke="#8b7051" stroke-width="1.6"/><circle cx="15" cy="14" r="3" fill="#d98874"/></svg>';
-  button.addEventListener('click',()=>onSelect(letter.id));
+  if(group.length>1){
+   const count=document.createElement('span');
+   count.textContent=String(group.length);
+   count.style.cssText='position:absolute;top:-8px;right:-8px;min-width:24px;padding:3px 5px;border:2px solid #fff;border-radius:20px;background:#243958;color:#fff;font:700 12px/1 system-ui;text-align:center';
+   button.append(count);
+   const vi=document.documentElement.lang==='vi';
+   button.setAttribute('aria-label',vi?group.length+' lá thư · '+letter.place:group.length+' letters · '+letter.place);
+  }
+  button.addEventListener('click',()=>onSelect(group.map(item=>item.id)));
   return new globalThis.maplibregl.Marker({element:button}).setLngLat([letter.lng,letter.lat]).addTo(instance);
  });
 }
