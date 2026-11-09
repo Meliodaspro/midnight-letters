@@ -285,3 +285,54 @@ function addPets(map,letters){
  }});
 }
 
+
+export function decodeWalkingShape(shape){
+ const points=[];
+ let index=0,lat=0,lng=0;
+ function delta(){
+  let value=0,shift=0,chunk;
+  do{
+   if(index>=shape.length||shift>30)throw Error('Invalid route shape');
+   chunk=shape.charCodeAt(index++)-63;
+   if(chunk<0||chunk>63)throw Error('Invalid route shape');
+   value|=(chunk&31)<<shift;
+   shift+=5;
+  }while(chunk>=32);
+  return value&1?~(value>>1):value>>1;
+ }
+ while(index<shape.length){lat+=delta();lng+=delta();points.push([lng/1e6,lat/1e6])}
+ return points;
+}
+
+export async function fetchWalkingRoute(origin,destination,signal){
+ const locations=[origin,destination].map(({lat,lng})=>({lat,lon:lng}));
+ const url=new URL('https://valhalla1.openstreetmap.de/route');
+ url.searchParams.set('json',JSON.stringify({locations,costing:'pedestrian',units:'kilometers'}));
+ const response=await fetch(url,{signal:AbortSignal.any([signal,AbortSignal.timeout(12000)])});
+ if(!response.ok)throw Error('No walking route');
+ const {trip}=await response.json();
+ const coordinates=trip.legs.flatMap(leg=>decodeWalkingShape(leg.shape));
+ if(coordinates.length<2||!Number.isFinite(trip.summary?.length)||!Number.isFinite(trip.summary?.time))throw Error('Invalid walking route');
+ return {coordinates,km:trip.summary.length,minutes:Math.max(1,Math.round(trip.summary.time/60))};
+}
+
+export function showWalkingRoute(route){
+ if(!instance)return;
+ const data={type:'Feature',properties:{},geometry:{type:'LineString',coordinates:route.coordinates}};
+ const source=instance.getSource('walking-route');
+ if(source)source.setData(data);
+ else{
+  instance.addSource('walking-route',{type:'geojson',data});
+  for(const [id,color,width] of [['walking-route-outline','#fffaf0',9],['walking-route-line','#0962da',5]]){
+   instance.addLayer({id,type:'line',source:'walking-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':color,'line-width':width}});
+  }
+ }
+ const bounds=new globalThis.maplibregl.LngLatBounds();
+ for(const coordinate of route.coordinates)bounds.extend(coordinate);
+ instance.fitBounds(bounds,{padding:72,maxZoom:16,duration:650});
+}
+export function clearWalkingRoute(){
+ if(!instance)return;
+ for(const id of ['walking-route-line','walking-route-outline'])if(instance.getLayer(id))instance.removeLayer(id);
+ if(instance.getSource('walking-route'))instance.removeSource('walking-route');
+}
