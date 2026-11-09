@@ -122,10 +122,13 @@ export function showPosition(position){
  if(!userMarker){
   const element=document.createElement('div');
   element.className='storybook-user';
-  element.setAttribute('role','img');
-  element.setAttribute('aria-label','GPS');
+  const label=document.createElement('span');
+  label.className='storybook-user-label';
+  label.textContent=document.documentElement.lang==='vi'?'Bạn đang ở đây':'You are here';
+  element.append(label);
   userMarker=new globalThis.maplibregl.Marker({element});
   userMarker.setLngLat([position.lng,position.lat]).addTo(instance);
+  instance.easeTo({center:[position.lng,position.lat],zoom:Math.max(instance.getZoom(),15),duration:650});
  }
  userMarker.setLngLat([position.lng,position.lat]);
 }
