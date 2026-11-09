@@ -102,7 +102,7 @@ const server = createServer(async (req,res) => {
   }
   if(route==='/api/suggest-letter'){
    if(!user)return respond(res,401,{error:'login_required'});
-   const key=process.env.OPENAI_API_KEY;
+   const key=process.env.GEMINI_API_KEY;
    if(!key)return respond(res,503,{error:'ai_unconfigured'});
    const {tag,lang}=await body(req);
    const topics={peace:'rest and kindness',love:'gratitude and connection',journey:'courage and new beginnings'};
@@ -113,30 +113,34 @@ const server = createServer(async (req,res) => {
    if(!reservation.changes)return respond(res,429,{error:'ai_wait'});
    activeSuggestions++;
    try{
-    const response=await fetch('https://api.openai.com/v1/chat/completions',{
+    const model=(process.env.GEMINI_MODEL||'gemini-2.5-flash-lite').replace(/^models\//,'');
+    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
      method:'POST',signal:AbortSignal.timeout(11000),
-     headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+     headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
      body:JSON.stringify({
-      model:process.env.OPENAI_MODEL||'gpt-4.1-mini',
-      response_format:{type:'json_object'},max_completion_tokens:450,
-      messages:[
-       {role:'system',content:'Write one warm, original letter for a stranger to discover. Use one concrete image and a gentle thought. Avoid cliches, insults and invented facts about the reader. Return JSON with title and body strings. Title at most 80 characters. Body 2–3 short paragraphs, at most 130 words.'},
-       {role:'user',content:'Language: '+(lang==='vi'?'natural Vietnamese':'English')+'. Theme: '+topics[tag]+'.'}
-      ]
+      systemInstruction:{parts:[{text:'Write one warm, original letter for a stranger to discover. Use one concrete image and a gentle thought. Avoid cliches, insults and invented facts about the reader. Title at most 80 characters. Body 2–3 short paragraphs, at most 130 words.'}]},
+      contents:[{role:'user',parts:[{text:'Language: '+(lang==='vi'?'natural Vietnamese':'English')+'. Theme: '+topics[tag]+'.'}]}],
+      generationConfig:{
+       responseMimeType:'application/json',
+       responseSchema:{type:'OBJECT',required:['title','body'],properties:{title:{type:'STRING'},body:{type:'STRING'}}},
+       maxOutputTokens:1024,
+       ...(model.startsWith('gemini-2.5-flash')?{thinkingConfig:{thinkingBudget:0}}:{})
+      }
      })
     });
     if(!response.ok){
-     const error=await response.json().catch(()=>null);
-     const code=error?.error?.code;
-     console.warn('AI provider rejected request:',response.status,typeof code==='string'&&/^[a-z_0-9]+$/i.test(code)?code:'unknown');
-     if(response.status===401||response.status===403)return respond(res,503,{error:'ai_key_rejected'});
-     if(code==='insufficient_quota')return respond(res,503,{error:'ai_quota_exhausted'});
-     if(code==='model_not_found')return respond(res,503,{error:'ai_model_unavailable'});
+     const result=await response.json().catch(()=>null);
+     const status=result?.error?.status;
+     const reason=Array.isArray(result?.error?.details)?result.error.details.find(detail=>typeof detail?.reason==='string')?.reason:null;
+     console.warn('Gemini rejected request:',response.status,typeof status==='string'&&/^[A-Z_]+$/.test(status)?status:'unknown');
+     if(response.status===401||response.status===403||reason==='API_KEY_INVALID')return respond(res,503,{error:'ai_key_rejected'});
+     if(response.status===404)return respond(res,503,{error:'ai_model_unavailable'});
      if(response.status===429)return respond(res,429,{error:'ai_provider_rate_limit'});
      return respond(res,503,{error:'ai_unavailable'});
     }
     const result=await response.json();
-    const suggestion=JSON.parse(result.choices?.[0]?.message?.content||'null');
+    const parts=result.candidates?.[0]?.content?.parts;
+    const suggestion=JSON.parse(parts?.filter(part=>!part.thought).map(part=>part.text??'').join('')||'null');
     const title=typeof suggestion?.title==='string'?suggestion.title.trim():'';
     const message=typeof suggestion?.body==='string'?suggestion.body.trim():'';
     if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse))return respond(res,503,{error:'ai_unavailable'});
