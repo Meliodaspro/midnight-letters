@@ -125,14 +125,23 @@ const server = createServer(async (req,res) => {
       ]
      })
     });
-    if(!response.ok)return respond(res,502,{error:'ai_unavailable'});
+    if(!response.ok){
+     const error=await response.json().catch(()=>null);
+     const code=error?.error?.code;
+     console.warn('AI provider rejected request:',response.status,typeof code==='string'&&/^[a-z_0-9]+$/i.test(code)?code:'unknown');
+     if(response.status===401||response.status===403)return respond(res,503,{error:'ai_key_rejected'});
+     if(code==='insufficient_quota')return respond(res,503,{error:'ai_quota_exhausted'});
+     if(code==='model_not_found')return respond(res,503,{error:'ai_model_unavailable'});
+     if(response.status===429)return respond(res,429,{error:'ai_provider_rate_limit'});
+     return respond(res,503,{error:'ai_unavailable'});
+    }
     const result=await response.json();
     const suggestion=JSON.parse(result.choices?.[0]?.message?.content||'null');
     const title=typeof suggestion?.title==='string'?suggestion.title.trim():'';
     const message=typeof suggestion?.body==='string'?suggestion.body.trim():'';
-    if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse))return respond(res,502,{error:'ai_unavailable'});
+    if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse))return respond(res,503,{error:'ai_unavailable'});
     return respond(res,200,{title,body:message});
-   }catch{return respond(res,502,{error:'ai_unavailable'})}
+   }catch(error){console.warn('AI provider request failed:',error.name);return respond(res,503,{error:'ai_unavailable'})}
    finally{activeSuggestions--}
   }
   if(route==='/api/letters'){
