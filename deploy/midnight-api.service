@@ -1,0 +1,15 @@
+[Unit]
+Description=Midnight Letters account API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/midnight-letters
+ExecStart=/usr/bin/env node scripts/server.mjs
+Environment=MIDNIGHT_DATA_DIR=%h/.local/share/midnight-letters
+UMask=0077
+Restart=on-failure
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

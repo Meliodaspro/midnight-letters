@@ -91,6 +91,7 @@ export async function connectMap(container,letters,onSelect){
    resizeObserver.observe(container);
    instance=map;
    refreshMarkers(letters,onSelect);
+   addPets(map,letters);
    return map;
   }catch(error){
    resizeObserver?.disconnect();
@@ -129,3 +130,58 @@ export function showPosition(position){
  userMarker.setLngLat([position.lng,position.lat]);
 }
 export function clearPosition(){userMarker?.remove();userMarker=null}
+
+export function terrainEnabled(){return !!instance?.getTerrain()}
+export function toggleTerrain(){
+ if(!instance)return;
+ if(terrainEnabled()){instance.setTerrain(null);return}
+ if(!instance.getSource('midnight-terrain')){
+  instance.addSource('midnight-terrain',{
+   type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:15,
+   tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+   attribution:'Elevation tiles by Mapzen'
+  });
+ }
+ instance.setTerrain({source:'midnight-terrain',exaggeration:1.3});
+}
+
+const pets=[
+ {name:'cat',color:'#f3a975',ears:2.1,tail:1.5},
+ {name:'dog',color:'#ba8763',ears:1.1,tail:1.25},
+ {name:'rabbit',color:'#e7bbe3',ears:3.2,tail:0.9}
+];
+
+function addPets(map,letters){
+ const features=[];
+ for(const letter of letters.slice(0,3)){
+  const pet=pets[Math.floor(Math.random()*pets.length)];
+  const lng=letter.lng+(Math.random()-.5)*.0005;
+  const lat=letter.lat+(Math.random()-.5)*.0005;
+  const dx=1/(111320*Math.cos(lat*Math.PI/180));
+  const dy=1/111320;
+  // Small block models anchored to real locations, drawn in the existing map renderer.
+  function block(x,y,w,h,base,top,color=pet.color){
+   const point=(east,north)=>[lng+east*dx,lat+north*dy];
+   features.push({type:'Feature',properties:{base,top,color},geometry:{type:'Polygon',coordinates:[[
+    point(x,y),point(x+w,y),point(x+w,y+h),point(x,y+h),point(x,y)
+   ]]}});
+  }
+  block(-2,-3,4,5,1,3);
+  block(-1.6,1.1,3.2,2.6,2.1,4.4);
+  for(const x of [-1.75,0.75]){
+   block(x,-2.6,1,1,0,1.7);
+   block(x,.6,1,1,0,1.7);
+   block(x,2.15,.9,1,4.1,4.1+pet.ears);
+   block(x+.28,3.65,.45,.2,3.4,3.8,'#3d3340');
+  }
+  block(-.6,-4.4,1.2,1.8,2.1,2.1+pet.tail);
+ }
+ if(!features.length)return;
+ map.addSource('midnight-pets',{type:'geojson',data:{type:'FeatureCollection',features}});
+ map.addLayer({id:'midnight-pets',type:'fill-extrusion',source:'midnight-pets',minzoom:16,paint:{
+  'fill-extrusion-color':['get','color'],
+  'fill-extrusion-base':['get','base'],
+  'fill-extrusion-height':['get','top']
+ }});
+}
+
