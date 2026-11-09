@@ -13,12 +13,14 @@ db.exec(`
  PRAGMA journal_mode=WAL;
  CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS ai_usage(user_id INTEGER PRIMARY KEY REFERENCES users(id), last_request INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS letters(id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL);
 `);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const maxAge = 7 * 86400;
 const attempts = new Map();
 let activeAuth = 0;
+let activeSuggestions = 0;
 setInterval(() => {
  for (const [key, entry] of attempts) if (entry.until < Date.now()) attempts.delete(key);
  db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
@@ -92,6 +94,41 @@ const server = createServer(async (req,res) => {
     db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(digest(token),row.id,now+maxAge*1000);
     return respond(res,200,{user:{username}},cookie(token,maxAge));
    }finally{activeAuth--}
+  }
+  if(route==='/api/suggest-letter'){
+   if(!user)return respond(res,401,{error:'login_required'});
+   const key=process.env.OPENAI_API_KEY;
+   if(!key)return respond(res,503,{error:'ai_unconfigured'});
+   const {tag,lang}=await body(req);
+   const topics={peace:'rest and kindness',love:'gratitude and connection',journey:'courage and new beginnings'};
+   if(!Object.hasOwn(topics,tag)||!['vi','en'].includes(lang))return respond(res,400,{error:'invalid_suggestion'});
+   const now=Date.now();
+   if(activeSuggestions>=2)return respond(res,429,{error:'ai_busy'});
+   const reservation=db.prepare('INSERT INTO ai_usage VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET last_request=excluded.last_request WHERE ai_usage.last_request <= ?').run(user.id,now,now-30000);
+   if(!reservation.changes)return respond(res,429,{error:'ai_wait'});
+   activeSuggestions++;
+   try{
+    const response=await fetch('https://api.openai.com/v1/chat/completions',{
+     method:'POST',signal:AbortSignal.timeout(11000),
+     headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+     body:JSON.stringify({
+      model:process.env.OPENAI_MODEL||'gpt-4.1-mini',
+      response_format:{type:'json_object'},max_completion_tokens:450,
+      messages:[
+       {role:'system',content:'Write one warm, original letter for a stranger to discover. Use one concrete image and a gentle thought. Avoid cliches, insults and invented facts about the reader. Return JSON with title and body strings. Title at most 80 characters. Body 2–3 short paragraphs, at most 130 words.'},
+       {role:'user',content:'Language: '+(lang==='vi'?'natural Vietnamese':'English')+'. Theme: '+topics[tag]+'.'}
+      ]
+     })
+    });
+    if(!response.ok)return respond(res,502,{error:'ai_unavailable'});
+    const result=await response.json();
+    const suggestion=JSON.parse(result.choices?.[0]?.message?.content||'null');
+    const title=typeof suggestion?.title==='string'?suggestion.title.trim():'';
+    const message=typeof suggestion?.body==='string'?suggestion.body.trim():'';
+    if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse))return respond(res,502,{error:'ai_unavailable'});
+    return respond(res,200,{title,body:message});
+   }catch{return respond(res,502,{error:'ai_unavailable'})}
+   finally{activeSuggestions--}
   }
   if(route==='/api/letters'){
    if(!user)return respond(res,401,{error:'login_required'});
