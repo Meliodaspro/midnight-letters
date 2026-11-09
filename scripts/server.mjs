@@ -59,9 +59,18 @@ function sameOrigin(req) {
 }
 const server = createServer(async (req,res) => {
  try {
-  const route=new URL(req.url,'http://localhost').pathname;
+  const url=new URL(req.url,'http://localhost');
+  const route=url.pathname;
   const user=session(req);
   if(req.method==='GET'&&route==='/api/session')return respond(res,200,{user:user?{username:user.username}:null});
+  if(req.method==='GET'&&route==='/api/admin/letters'){
+   if(!user)return respond(res,401,{error:'login_required'});
+   if(user.username!=='admin')return respond(res,403,{error:'admin_required'});
+   const page=Number(url.searchParams.get('page')||0);
+   if(!Number.isSafeInteger(page)||page<0||page>1000000)return respond(res,400,{error:'invalid_page'});
+   const rows=db.prepare('SELECT letters.payload,users.username FROM letters JOIN users ON users.id=letters.user_id ORDER BY letters.rowid DESC LIMIT 51 OFFSET ?').all(page*50);
+   return respond(res,200,{letters:rows.slice(0,50).map(row=>({letter:JSON.parse(row.payload),username:row.username})),more:rows.length>50});
+  }
   if(req.method==='GET'&&route==='/api/letters'){
    if(!user)return respond(res,401,{error:'login_required'});
    return respond(res,200,{letters:db.prepare('SELECT payload FROM letters WHERE user_id=?').all(user.id).map(row=>JSON.parse(row.payload))});
@@ -77,6 +86,7 @@ const server = createServer(async (req,res) => {
    const data=await body(req);
    const username=typeof data.username==='string'?data.username.trim().toLowerCase():'';
    const password=typeof data.password==='string'?data.password:'';
+   if(route==='/api/register'&&username==='admin')return respond(res,409,{error:'username_taken'});
    if(!/^[a-z0-9_]{3,30}$/.test(username)||password.length<10||password.length>128)return respond(res,400,{error:'invalid_credentials'});
    const now=Date.now();
    const client=req.headers['cf-connecting-ip']||req.socket.remoteAddress;

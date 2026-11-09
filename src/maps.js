@@ -1,3 +1,4 @@
+import {seeds} from './core/seed.js';
 import {distanceMeters} from './core/location.js';
 const STYLE_URL='https://tiles.openfreemap.org/styles/liberty';
 const CDN='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/';
@@ -92,7 +93,7 @@ export async function connectMap(container,letters,onSelect){
    resizeObserver.observe(container);
    instance=map;
    refreshMarkers(letters,onSelect);
-   addPets(map,letters);
+   addPets(map,letters.length?letters:seeds);
    return map;
   }catch(error){
    resizeObserver?.disconnect();
