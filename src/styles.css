@@ -91,5 +91,6 @@
 .storybook-pin{width:52px;height:52px;display:grid;place-items:center;border:3px solid #fff9e9;border-radius:18px;background:#e9b780;box-shadow:0 3px 0 #ad805c,0 6px 14px #594c4133;color:#67533e;cursor:pointer}
 .storybook-pin:hover,.storybook-pin:focus-visible{background:#f2ce9d;outline:3px solid #6caa98;outline-offset:3px}
 .storybook-pin svg{pointer-events:none}
-.storybook-user{width:24px;height:24px;border:4px solid #fff9e9;border-radius:50%;background:#62ac9b;box-shadow:0 0 0 6px #62ac9b33,0 3px 8px #365c4a33;pointer-events:none}
+.storybook-user{width:38px;height:38px;border:5px solid #fff;border-radius:50%;background:#0078f0;box-shadow:0 0 0 8px #0078f054,0 3px 12px #17305355;pointer-events:none;z-index:2}
+.storybook-user-label{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);padding:5px 10px;border:2px solid #fff;border-radius:20px;background:#0657b6;color:#fff;font:700 12px/1.3 system-ui,sans-serif;white-space:nowrap;box-shadow:0 2px 8px #17305344}
 .map-pane.live .map-credit:empty{display:none}
