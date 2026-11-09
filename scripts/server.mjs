@@ -123,7 +123,7 @@ const server = createServer(async (req,res) => {
       generationConfig:{
        responseMimeType:'application/json',
        responseSchema:{type:'OBJECT',required:['title','body'],properties:{title:{type:'STRING'},body:{type:'STRING'}}},
-       maxOutputTokens:1024,
+       maxOutputTokens:4096,
        ...(model.startsWith('gemini-2.5-flash')?{thinkingConfig:{thinkingBudget:0}}:{})
       }
      })
@@ -139,13 +139,25 @@ const server = createServer(async (req,res) => {
      return respond(res,503,{error:'ai_unavailable'});
     }
     const result=await response.json();
-    const parts=result.candidates?.[0]?.content?.parts;
-    const suggestion=JSON.parse(parts?.filter(part=>!part.thought).map(part=>part.text??'').join('')||'null');
+    const candidate=result.candidates?.[0];
+    const parts=candidate?.content?.parts;
+    const output=parts?.filter(part=>!part.thought).map(part=>part.text??'').join('')||'';
+    const finish=String(candidate?.finishReason||result.promptFeedback?.blockReason||'UNKNOWN').replace(/[^A-Z_]/g,'');
+    if(!output||finish==='MAX_TOKENS'){
+     console.warn('Gemini did not finish a letter:',model,finish);
+     return respond(res,503,{error:finish==='MAX_TOKENS'?'ai_output_truncated':'ai_empty_response'});
+    }
+    let suggestion;
+    try{suggestion=JSON.parse(output)}
+    catch{console.warn('Gemini returned invalid letter JSON:',model,finish);return respond(res,503,{error:'ai_invalid_response'});}
     const title=typeof suggestion?.title==='string'?suggestion.title.trim():'';
     const message=typeof suggestion?.body==='string'?suggestion.body.trim():'';
-    if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse))return respond(res,503,{error:'ai_unavailable'});
+    if(!title||title.length>80||!message||message.length>3000||[title,message].some(hasAbuse)){
+     console.warn('Gemini letter failed validation:',model,finish);
+     return respond(res,503,{error:'ai_invalid_response'});
+    }
     return respond(res,200,{title,body:message});
-   }catch(error){console.warn('AI provider request failed:',error.name);return respond(res,503,{error:'ai_unavailable'})}
+   }catch(error){console.warn('AI provider request failed:',error.name);return respond(res,503,{error:error.name==='TimeoutError'?'ai_timeout':'ai_unavailable'})}
    finally{activeSuggestions--}
   }
   if(route==='/api/letters'){
