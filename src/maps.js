@@ -162,33 +162,87 @@ export function showPosition(position){
 }
 export function clearPosition(){userMarker?.remove();userMarker=null}
 
+const ELEVATION_TILES='https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+let contourDEM,terrainPending;
+const terrainColors=new Map();
+
 export function terrainEnabled(){return !!instance?.getTerrain()}
+
+async function loadContours(){
+ if(contourDEM)return contourDEM;
+ if(!globalThis.mlcontour)await new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.0/dist/index.min.js';
+  const fail=()=>{clearTimeout(timer);script.remove();reject(Error('Contour plugin unavailable'))};
+  const timer=setTimeout(fail,8000);
+  script.onload=()=>{clearTimeout(timer);resolve()};
+  script.onerror=fail;
+  document.head.append(script);
+ });
+ contourDEM=new globalThis.mlcontour.DemSource({url:ELEVATION_TILES,encoding:'terrarium',maxzoom:13,worker:true,cacheSize:100,timeoutMs:10000});
+ contourDEM.setupMaplibre(globalThis.maplibregl);
+ return contourDEM;
+}
+
 export function toggleTerrain(){
- if(!instance)return;
- if(terrainEnabled()){
-  instance.setTerrain(null);
-  if(instance.getLayer('midnight-hillshade'))instance.removeLayer('midnight-hillshade');
-  if(instance.getSource('midnight-terrain'))instance.removeSource('midnight-terrain');
-  return;
+ if(!instance)return Promise.resolve(false);
+ if(terrainPending)return terrainPending;
+ terrainPending=switchTerrain().catch(error=>{clearTerrain(instance);throw error}).finally(()=>{terrainPending=null});
+ return terrainPending;
+}
+function clearTerrain(map){
+ map.setTerrain(null);
+ for(const id of ['midnight-contour-labels','midnight-contour-lines','midnight-hillshade']){
+  if(map.getLayer(id))map.removeLayer(id);
  }
- if(!instance.getSource('midnight-terrain')){
-  instance.addSource('midnight-terrain',{
-   type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:15,
-   tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-   attribution:'Elevation tiles by Mapzen'
+ for(const id of ['midnight-contours','midnight-terrain']){
+  if(map.getSource(id))map.removeSource(id);
+ }
+ for(const [id,property,value] of terrainColors.values())map.setPaintProperty(id,property,value);
+ terrainColors.clear();
+ return true;
+}
+async function switchTerrain(){
+ const map=instance;
+ if(terrainEnabled()){clearTerrain(map);return true}
+
+ const dem=await loadContours().catch(()=>null);
+ const layers=map.getStyle().layers;
+ const before=layers.find(layer=>layer.type==='symbol'||layer['source-layer']==='transportation')?.id;
+ for(const layer of layers){
+  const feature=layer['source-layer'];
+  const color=layer.type==='background'?'#f3f1e1':layer.type==='fill'?{park:'#c8dfad',landcover:'#d9e7c0',landuse:'#ebe9d4',water:'#9dcbe5',building:'#dfdbcf'}[feature]:null;
+  if(!color)continue;
+  const property=layer.type==='background'?'background-color':'fill-color';
+  terrainColors.set(layer.id,[layer.id,property,map.getPaintProperty(layer.id,property)]);
+  map.setPaintProperty(layer.id,property,color);
+ }
+ map.addSource('midnight-terrain',{
+  type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:13,
+  tiles:[dem?.sharedDemProtocolUrl||ELEVATION_TILES],attribution:'Elevation tiles by Mapzen'
+ });
+ map.addLayer({
+  id:'midnight-hillshade',type:'hillshade',source:'midnight-terrain',minzoom:3,
+  paint:{'hillshade-exaggeration':0.55,'hillshade-shadow-color':'#535c46','hillshade-highlight-color':'#fff9e6','hillshade-accent-color':'#829171'}
+ },before);
+ if(dem){
+  map.addSource('midnight-contours',{type:'vector',minzoom:11,maxzoom:15,
+   tiles:[dem.contourProtocolUrl({thresholds:{11:[100,500],13:[40,200],15:[20,100]}})]
+  });
+  map.addLayer({
+   id:'midnight-contour-lines',type:'line',source:'midnight-contours','source-layer':'contours',
+   filter:['>', ['get','ele'],0],
+   paint:{'line-color':'#8a805c','line-opacity':0.62,'line-width':['match',['get','level'],1,1.2,0.55]}
+  },before);
+  map.addLayer({
+   id:'midnight-contour-labels',type:'symbol',source:'midnight-contours','source-layer':'contours',minzoom:12,
+   filter:['all',['>', ['get','level'],0],['>', ['get','ele'],0]],
+   layout:{'symbol-placement':'line','symbol-spacing':280,'text-font':['Noto Sans Regular'],'text-size':10,'text-field':['concat',['to-string',['get','ele']],' m']},
+   paint:{'text-color':'#6f6247','text-halo-color':'#f7f5e4','text-halo-width':1}
   });
  }
- const before=instance.getStyle().layers.find(layer=>layer.type==='symbol'||layer['source-layer']==='transportation')?.id;
- instance.addLayer({
-  id:'midnight-hillshade',type:'hillshade',source:'midnight-terrain',minzoom:3,
-  paint:{
-   'hillshade-exaggeration':0.55,
-   'hillshade-shadow-color':'#4d5c43',
-   'hillshade-highlight-color':'#fff6d4',
-   'hillshade-accent-color':'#7e8c67'
-  }
- },before);
- instance.setTerrain({source:'midnight-terrain',exaggeration:1.3});
+ map.setTerrain({source:'midnight-terrain',exaggeration:1.12});
+ return !!dem;
 }
 
 const pets=[
