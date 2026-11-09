@@ -53,7 +53,35 @@ async function updateComposeLocation(form){
  }
  return fix;
 }
-function render(){mapHost.remove();document.documentElement.lang=lang;document.title='Midnight · '+t('brand');$('#app').innerHTML=`<div class="shell view-${view} ${view!=='explore'?'full-page':''} ${listMode?'list-mode':''}">${nav()}<aside class="panel">${view==='explore'?explorePanel():view==='write'?writePanel():view==='saved'?savedPanel():profilePanel()}</aside><main class="map-pane ${maps.hasMap()?'live':''}" aria-label="${t('map')}">${mapHTML()}</main></div>`;$('#map-mount').append(mapHost);const form=$('#compose');if(form)void updateComposeLocation(form)}
+function render(){
+ document.documentElement.lang=lang;
+ document.title='Midnight · '+t('brand');
+ const app=$('#app');
+ const template=document.createElement('template');
+ template.innerHTML=`<div class="shell view-${view} ${view!=='explore'?'full-page':''} ${listMode?'list-mode':''}">${nav()}<aside class="panel">${view==='explore'?explorePanel():view==='write'?writePanel():view==='saved'?savedPanel():profilePanel()}</aside><main class="map-pane ${maps.hasMap()?'live':''}" aria-label="${t('map')}">${mapHTML()}</main></div>`;
+ const next=template.content.firstElementChild;
+ const shell=app.firstElementChild;
+ if(shell){
+  shell.className=next.className;
+  shell.querySelector('.nav').replaceWith(next.querySelector('.nav'));
+  shell.querySelector('.panel').replaceWith(next.querySelector('.panel'));
+  const pane=shell.querySelector('.map-pane');
+  const nextPane=next.querySelector('.map-pane');
+  pane.className=nextPane.className;
+  pane.setAttribute('aria-label',nextPane.getAttribute('aria-label'));
+  // Keep the WebGL canvas attached when navigation, GPS or account UI changes.
+  for(const child of Array.from(nextPane.children)){
+   if(child.classList.contains('map-canvas'))continue;
+   pane.querySelector(':scope > .'+child.classList[0]).replaceWith(child);
+  }
+  pane.querySelector('#map-mount').style.visibility=maps.hasMap()?'visible':'hidden';
+ }else{
+  app.append(next);
+  next.querySelector('#map-mount').append(mapHost);
+ }
+ const form=$('#compose');
+ if(form)void updateComposeLocation(form);
+}
 function refresh(){if(view==='explore'){$('#cards').innerHTML=cardsHTML();$('#letter-count').textContent=selectedCards().length+' '+t('letters');$('#detail').innerHTML=detailHTML();$('#proximity-hint').innerHTML=proximityHTML();document.querySelectorAll('.marker[data-select]').forEach(el=>el.classList.toggle('selected',el.dataset.select===selected));$('#position-status').textContent=position?t('accuracy')+' ±'+Math.round(position.accuracy)+' m':t('unknown')}}
 function select(id){selected=id;listMode=false;render();const letter=current();if(letter)maps.panTo(letter)}
 function selectMapLetters(ids){

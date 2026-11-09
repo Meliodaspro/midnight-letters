@@ -1,6 +1,7 @@
 import {seeds} from './core/seed.js';
 import {distanceMeters} from './core/location.js';
 const STYLE_URL='https://tiles.openfreemap.org/styles/liberty';
+const DEFAULT_PITCH=38;
 const CDN='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/';
 let sdk, instance, pending, resizeObserver, userMarker;
 let markers=[];
@@ -75,7 +76,7 @@ export async function connectMap(container,letters,onSelect){
   const [lib,response]=await Promise.all([loadSDK(),fetch(STYLE_URL,{signal:AbortSignal.timeout(15000)})]);
   if(!response.ok)throw Error('Map style unavailable');
   const style=pastelStyle(await response.json());
-  const map=new lib.Map({container,style,center:[105.8525,21.0285],zoom:16.3,pitch:52,bearing:-18,maxPitch:65});
+  const map=new lib.Map({container,style,center:[105.8525,21.0285],zoom:15.8,pitch:DEFAULT_PITCH,bearing:-18,maxPitch:65});
   try{
    await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{map.off('load',loaded);reject(Error('Map timed out'))},20000);
@@ -86,10 +87,16 @@ export async function connectMap(container,letters,onSelect){
    map.on('zoomend',()=>{
     const zoom=map.getZoom();
     if(!overview&&zoom<12){overview=true;map.easeTo({pitch:0,duration:300})}
-    else if(overview&&zoom>=14){overview=false;map.easeTo({pitch:52,duration:300})}
+    else if(overview&&zoom>=14){overview=false;map.easeTo({pitch:DEFAULT_PITCH,duration:300})}
    });
    map.addControl(new lib.NavigationControl({visualizePitch:true}),'bottom-right');
-   resizeObserver=new ResizeObserver(()=>{if(container.clientWidth&&container.clientHeight)map.resize()});
+   let width=container.clientWidth,height=container.clientHeight;
+   resizeObserver=new ResizeObserver(()=>{
+    const nextWidth=container.clientWidth,nextHeight=container.clientHeight;
+    if(!nextWidth||!nextHeight||nextWidth===width&&nextHeight===height)return;
+    width=nextWidth;height=nextHeight;
+    map.resize();
+   });
    resizeObserver.observe(container);
    instance=map;
    refreshMarkers(letters,onSelect);
