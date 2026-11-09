@@ -49,8 +49,13 @@ function cookie(token, age) {
  return `midnight_session=${token}; Path=/api; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
 }
 function sameOrigin(req) {
- try { const origin=new URL(req.headers.origin);return origin.protocol==='https:'&&origin.host===req.headers.host; }
- catch { return false; }
+ const site=req.headers['sec-fetch-site'];
+ if(site&&site!=='same-origin')return false;
+ try {
+  const origin=new URL(req.headers.origin);
+  // Browser fetch metadata describes the public URL even when a proxy rewrites Host.
+  return origin.protocol==='https:'&&(site==='same-origin'||origin.host===req.headers.host);
+ }catch{return false}
 }
 const server = createServer(async (req,res) => {
  try {
