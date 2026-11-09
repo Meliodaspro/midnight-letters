@@ -165,7 +165,12 @@ export function clearPosition(){userMarker?.remove();userMarker=null}
 export function terrainEnabled(){return !!instance?.getTerrain()}
 export function toggleTerrain(){
  if(!instance)return;
- if(terrainEnabled()){instance.setTerrain(null);return}
+ if(terrainEnabled()){
+  instance.setTerrain(null);
+  if(instance.getLayer('midnight-hillshade'))instance.removeLayer('midnight-hillshade');
+  if(instance.getSource('midnight-terrain'))instance.removeSource('midnight-terrain');
+  return;
+ }
  if(!instance.getSource('midnight-terrain')){
   instance.addSource('midnight-terrain',{
    type:'raster-dem',encoding:'terrarium',tileSize:256,maxzoom:15,
@@ -173,6 +178,16 @@ export function toggleTerrain(){
    attribution:'Elevation tiles by Mapzen'
   });
  }
+ const before=instance.getStyle().layers.find(layer=>layer.type==='symbol'||layer['source-layer']==='transportation')?.id;
+ instance.addLayer({
+  id:'midnight-hillshade',type:'hillshade',source:'midnight-terrain',minzoom:3,
+  paint:{
+   'hillshade-exaggeration':0.55,
+   'hillshade-shadow-color':'#4d5c43',
+   'hillshade-highlight-color':'#fff6d4',
+   'hillshade-accent-color':'#7e8c67'
+  }
+ },before);
  instance.setTerrain({source:'midnight-terrain',exaggeration:1.3});
 }
 
