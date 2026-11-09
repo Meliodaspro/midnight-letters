@@ -113,7 +113,7 @@ const server = createServer(async (req,res) => {
    if(!reservation.changes)return respond(res,429,{error:'ai_wait'});
    activeSuggestions++;
    try{
-    const model=(process.env.GEMINI_MODEL||'gemini-2.5-flash-lite').replace(/^models\//,'');
+    const model=(process.env.GEMINI_MODEL||'gemini-3.8-flash').replace(/^models\//,'');
     const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
      method:'POST',signal:AbortSignal.timeout(11000),
      headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
