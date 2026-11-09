@@ -28,10 +28,12 @@ function nightStyle(style){
  const building=style.layers.find(layer=>layer.type==='fill'&&layer['source-layer']==='building');
  for(const layer of style.layers){
   const feature=layer['source-layer'];
-  if(layer.type==='background')layer.paint={'background-color':'#18272e'};
+  if(layer.type==='background')layer.paint={'background-color':['interpolate',['linear'],['zoom'],0,'#40564d',9,'#344944',14,'#18272e']};
+  if(layer.id==='natural_earth')layer.paint={...layer.paint,'raster-opacity':0.65};
   if(layer.type==='fill'){
    const color={water:'#235663',landcover:'#29453c',landuse:'#293c38',park:'#2b493d',building:'#405455'}[feature];
-   layer.paint={...layer.paint,'fill-color':color||'#23343a','fill-outline-color':color||'#23343a'};
+   const fill=feature==='water'?['interpolate',['linear'],['zoom'],0,'#173c50',12,color]:color||'#23343a';
+   layer.paint={...layer.paint,'fill-color':fill,'fill-outline-color':fill};
   }
   if(layer.type==='line'){
    const color=feature==='transportation'?(layer.id.includes('casing')?'#29383c':'#76847e'):feature==='waterway'?'#326572':'#536763';
@@ -68,6 +70,12 @@ export async function connectMap(container,letters,onSelect){
     const timer=setTimeout(()=>{map.off('load',loaded);reject(Error('Map timed out'))},20000);
     function loaded(){clearTimeout(timer);resolve()}
     map.once('load',loaded);
+   });
+   let overview=map.getZoom()<12;
+   map.on('zoomend',()=>{
+    const zoom=map.getZoom();
+    if(!overview&&zoom<12){overview=true;map.easeTo({pitch:0,duration:300})}
+    else if(overview&&zoom>=14){overview=false;map.easeTo({pitch:52,duration:300})}
    });
    map.addControl(new lib.NavigationControl({visualizePitch:true}),'bottom-right');
    resizeObserver=new ResizeObserver(()=>{if(container.clientWidth&&container.clientHeight)map.resize()});
