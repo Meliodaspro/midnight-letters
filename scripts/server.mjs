@@ -15,6 +15,7 @@ db.exec(`
  CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS ai_usage(user_id INTEGER PRIMARY KEY REFERENCES users(id), last_request INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS letters(id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS removed_letters(id TEXT PRIMARY KEY, removed_by INTEGER NOT NULL REFERENCES users(id), removed_at TEXT NOT NULL);
 `);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const maxAge = 7 * 86400;
@@ -73,10 +74,25 @@ const server = createServer(async (req,res) => {
   }
   if(req.method==='GET'&&route==='/api/letters'){
    if(!user)return respond(res,401,{error:'login_required'});
-   return respond(res,200,{letters:db.prepare('SELECT payload FROM letters WHERE user_id=?').all(user.id).map(row=>JSON.parse(row.payload))});
+   return respond(res,200,{letters:db.prepare('SELECT payload FROM letters WHERE user_id=?').all(user.id).map(row=>JSON.parse(row.payload)),removedIds:db.prepare('SELECT id FROM removed_letters').all().map(row=>row.id)});
   }
   if(req.method!=='POST')return respond(res,404,{error:'not_found'});
   if(!sameOrigin(req))return respond(res,403,{error:'invalid_origin'});
+  if(route==='/api/admin/letters/delete'){
+   if(!user)return respond(res,401,{error:'login_required'});
+   if(user.username!=='admin')return respond(res,403,{error:'admin_required'});
+   const {id}=await body(req);
+   if(typeof id!=='string'||!/^[a-f0-9-]{32,36}$/i.test(id))return respond(res,400,{error:'invalid_letter'});
+   db.exec('BEGIN IMMEDIATE');
+   try{
+    const result=db.prepare('DELETE FROM letters WHERE id=?').run(id);
+    if(!result.changes){db.exec('ROLLBACK');return respond(res,404,{error:'letter_not_found'});}
+    // Keep only an ID tombstone and audit metadata, never the removed content.
+    db.prepare('INSERT INTO removed_letters VALUES(?,?,?)').run(id,user.id,new Date().toISOString());
+    db.exec('COMMIT');
+   }catch(error){db.exec('ROLLBACK');throw error;}
+   return respond(res,200,{deleted:id});
+  }
   if(route==='/api/logout'){
    const token=req.headers.cookie?.match(/(?:^|;\s*)midnight_session=([a-f0-9]{64})/)?.[1];
    if(token)db.prepare('DELETE FROM sessions WHERE token=?').run(digest(token));
@@ -175,7 +191,8 @@ const server = createServer(async (req,res) => {
    const data=await body(req);
    const {id,title,body:message,author,tag,lat,lng,place}=data;
    if(!/^[a-f0-9-]{32,36}$/i.test(id)||typeof title!=='string'||!title.trim()||title.length>80||typeof message!=='string'||!message.trim()||message.length>3000||typeof author!=='string'||author.length>50||typeof place!=='string'||place.length>200||!['peace','love','journey'].includes(tag)||!Number.isFinite(lat)||Math.abs(lat)>90||!Number.isFinite(lng)||Math.abs(lng)>180)return respond(res,400,{error:'invalid_letter'});
-   if([title,message,author].some(hasAbuse))return respond(res,422,{error:'abusive_language'});
+   if(db.prepare('SELECT 1 FROM removed_letters WHERE id=?').get(id))return respond(res,410,{error:'letter_removed'});
+   if([title,message,author,place].some(hasAbuse))return respond(res,422,{error:'abusive_language'});
    if(db.prepare('SELECT count(*) AS count FROM letters WHERE user_id=?').get(user.id).count>=500)return respond(res,429,{error:'letter_limit'});
    const letter={id,title,body:message,author,tag,lat,lng,place,date:new Date().toISOString(),local:true};
    const result=db.prepare('INSERT OR IGNORE INTO letters VALUES(?,?,?)').run(id,user.id,JSON.stringify(letter));
@@ -189,4 +206,5 @@ const server = createServer(async (req,res) => {
 });
 server.requestTimeout=15000;
 server.headersTimeout=10000;
-server.listen(8787,'127.0.0.1',()=>console.log('Midnight API listening on 127.0.0.1:8787'));
+const port=Number(process.env.MIDNIGHT_PORT||8787);
+server.listen(port,'127.0.0.1',()=>console.log('Midnight API listening on 127.0.0.1:'+server.address().port));

@@ -5,9 +5,9 @@ const icon=name=>`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ico
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let lang=read('language','vi');if(!messages[lang])lang='vi';let view='explore',filter='all',query='',selected=null,position=null,watch=null,listMode=false,toastTimer,modalReturn;
 let letters=read('letters',[]);if(!Array.isArray(letters))letters=[];letters=letters.filter(d=>d&&typeof d.id==='string'&&typeof d.body==='string'&&Number.isFinite(d.lat)&&Number.isFinite(d.lng));
-let account=null,accountLetters=[];
+let account=null,accountLetters=[],removedLetterIds=new Set();
 let saved=read('saved',[]);if(!Array.isArray(saved))saved=[];let mapState='idle';const mapHost=document.createElement('div');mapHost.id='map';
-const t=k=>messages[lang][k]||k;const localLetters=()=>letters.filter(letter=>!accountLetters.some(saved=>saved.id===letter.id));const all=()=>[...localLetters(),...accountLetters];const current=()=>all().find(d=>d.id===selected)||all()[0];const text=(d,key)=>lang==='en'&&d[key+'En']?d[key+'En']:d[key];
+const t=k=>messages[lang][k]||k;const localLetters=()=>letters.filter(letter=>!accountLetters.some(saved=>saved.id===letter.id));const all=()=>[...localLetters(),...accountLetters].filter(letter=>!removedLetterIds.has(letter.id));const current=()=>all().find(d=>d.id===selected)||all()[0];const text=(d,key)=>lang==='en'&&d[key+'En']?d[key+'En']:d[key];
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').style.display='block';toastTimer=setTimeout(()=>$('#toast').style.display='none',3300)}
 function distance(d){return position?distanceMeters(position,d):null}
 function range(d){const n=distance(d);return n===null?t('unknown'):(n>=1000?(n/1000).toFixed(1)+' km':n+' m')+' '+t('away')}
@@ -213,14 +213,44 @@ async function adminLetters(page=0){
  try{
   const result=await api('admin/letters?page='+page);
   if(account!==owner||view!=='profile')return;
-  const rows=result.letters.map(({letter,username})=>`<details class="local-note"><summary>${esc(letter.title)} · @${esc(username)}</summary><p style="margin:8px 0">${esc(letter.place)} · ${esc(letter.date)}</p><p style="white-space:pre-wrap">${esc(letter.body)}</p></details>`).join('');
+  if(!result.letters.length&&page>0)return adminLetters(page-1);
+  const rows=result.letters.map(({letter,username})=>`<details class="local-note admin-letter"><summary>${esc(letter.title)} · @${esc(username)}</summary><p style="margin:8px 0">${esc(letter.place)} · ${esc(letter.date)}</p><p style="white-space:pre-wrap">${esc(letter.body)}</p><button class="admin-delete" data-delete-letter="${esc(letter.id)}" data-admin-page-current="${page}" data-letter-title="${esc(letter.title)}">${vi?'Xóa thư':'Delete letter'}</button></details>`).join('');
   modal(`<div class="eyebrow">ADMIN</div><h2>${vi?'Tất cả thư':'All letters'}</h2>${rows||`<p>${t('empty')}</p>`}<div class="actions">${page>0?`<button class="secondary" data-admin-page="${page-1}">← ${vi?'Trang trước':'Previous'}</button>`:''}${result.more?`<button class="secondary" data-admin-page="${page+1}">${vi?'Trang sau':'Next'} →</button>`:''}</div>`);
  }catch{if(account===owner)toast(vi?'Không tải được danh sách thư quản trị.':'Could not load admin letters.')}
+}
+async function deleteAdminLetter(button){
+ const owner=account,vi=lang==='vi';
+ if(owner?.username!=='admin'||button.disabled)return;
+ const id=button.dataset.deleteLetter;
+ if(!confirm(vi?`Xóa thư “${button.dataset.letterTitle}”? Nội dung sẽ bị xóa khỏi máy chủ và không thể khôi phục.`:`Delete “${button.dataset.letterTitle}”? Its content will be permanently removed from the server.`))return;
+ button.disabled=true;
+ try{
+  await api('admin/letters/delete',{id});
+  if(account!==owner)return;
+  removedLetterIds.add(id);
+  accountLetters=accountLetters.filter(letter=>letter.id!==id);
+  // Remove this device's stale copy too, so it cannot reappear while signed out.
+  const remaining=letters.filter(letter=>letter.id!==id);
+  if(write('letters',remaining))letters=remaining;
+  if(selected===id){selected=null;clearRoute()}
+  maps.refreshMarkers(all(),selectMapLetters);
+  render();
+  await adminLetters(Number(button.dataset.adminPageCurrent));
+  toast(vi?'Đã xóa thư.':'Letter deleted.');
+ }catch(error){
+  if(account===owner){button.disabled=false;toast(error.message==='letter_not_found'?(vi?'Thư đã được xóa. Hãy mở lại danh sách.':'Letter already deleted. Reopen the list.'):(vi?'Chưa xóa được thư. Hãy thử lại.':'Could not delete the letter. Try again.'))}
+ }
 }
 async function loadAccount(user){
  if(account?.username!==user?.username)clearRoute();
  account=user;
- accountLetters=user?(await api('letters')).letters:[];
+ const result=user?await api('letters'):{letters:[],removedIds:[]};
+ accountLetters=result.letters;
+ if(user){
+  removedLetterIds=new Set(result.removedIds||[]);
+  const remaining=letters.filter(letter=>!removedLetterIds.has(letter.id));
+  if(remaining.length!==letters.length&&write('letters',remaining))letters=remaining;
+ }
  maps.refreshMarkers(all(),selectMapLetters);
 }
 function accountSettings(){
@@ -251,6 +281,7 @@ async function importLetters(button){
    accountLetters.push(result.letter);
    count++;
   }catch(error){
+   if(error.message==='letter_removed'){removedLetterIds.add(letter.id);continue}
    if(error.message!=='abusive_language'&&error.message!=='invalid_letter'&&error.message!=='duplicate_letter')break;
   }
  }
@@ -261,7 +292,7 @@ async function importLetters(button){
 function settings(){modal(`<div class="eyebrow">MIDNIGHT · ${t('settings')}</div><h2>${t('maps')}</h2><p>${t('mapHelp')}</p>${maps.hasMap()?'':`<div class="actions"><button class="gold" id="retry-map">${t('connect')}</button></div>`}`)}
 async function connect(){if(mapState==='loading'||maps.hasMap())return;mapState='loading';render();try{await maps.connectMap(mapHost,all(),selectMapLetters);mapState='ready';render();if(position)maps.showPosition(position);toast(t('mapReady'))}catch{mapState='error';render();toast(t('mapError'))}}
 $('#app').addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;refresh()}if(e.target.id==='letter-body')$('#chars').textContent=e.target.value.length});
-document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.adminPage){void adminLetters(Number(b.dataset.adminPage));return}if(b.dataset.auth){const form=$('#account-form');if(form.querySelector('[type=submit]').disabled)return;form.dataset.action=b.dataset.auth;document.querySelectorAll('[data-auth]').forEach(tab=>tab.setAttribute('aria-pressed',String(tab===b)));form.querySelector('[type=submit]').textContent=b.textContent;$('#account-password').autocomplete=b.dataset.auth==='register'?'new-password':'current-password';$('#account-error').textContent='';return}if(b.dataset.nav){view=b.dataset.nav;render();return}if(b.dataset.locationLetter){close();select(b.dataset.locationLetter);return}if(b.dataset.select){select(b.dataset.select);return}if(b.dataset.read){openLetter(b.dataset.read,true);return}if(b.dataset.filter){filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(el=>{el.classList.toggle('active',el===b);el.setAttribute('aria-pressed',el===b?'true':'false')});refresh();return}switch(b.id){case'list-toggle':listMode=!listMode;render();break;case'approach':if(watch===null)startGPS();break;case'unlock':if(unlocked(current()))openLetter(current().id);break;case'locate':position?maps.panTo(position):startGPS();break;case'connect-shortcut':connect();break;case'walking-route':void routeToSelected();break;case'toggle-terrain':void changeTerrain(b);break;case'retry-map':close();connect();break;case'suggest-letter':void suggestLetter(b);break;case'apply-suggestion':applySuggestion();break;case'import-letters':void importLetters(b);break;case'admin-letters':void adminLetters();break;case'account-settings':accountSettings();break;case'account-logout':b.disabled=true;api('logout',{}).then(()=>loadAccount(null)).then(()=>{close();render()}).catch(()=>{b.disabled=false;toast(lang==='vi'?'Chưa đăng xuất được.':'Could not sign out.')});break;case'map-settings':case'settings-map':settings();break;case'close-modal':close();break;case'react':if(write('reaction.'+b.dataset.id,true)){toast(t('reacted'));b.disabled=true}else toast(t('storageError'));break;case'keep':{const next=[...new Set([...saved,b.dataset.id])];if(write('saved',next)){saved=next;b.disabled=true;b.innerHTML=icon('check')+' '+t('kept');toast(t('kept'))}else toast(t('storageError'));break}case'privacy':modal(`<div class="eyebrow">MIDNIGHT</div><h2>${t('privacy')}</h2><p>${t('privacyText')}</p><p>${lang==='vi'?'Khi bạn bấm Đi bộ, tọa độ điểm đi và điểm đến được gửi đến dịch vụ Valhalla để tính tuyến.':'When you tap Walk, the start and destination coordinates are sent to Valhalla to calculate the route.'}</p>`);break;case'about':modal(`<div class="eyebrow">MIDNIGHT LETTERS</div><h2>${t('brand')}</h2><p>${t('version')}</p><p style="margin-top:16px">${t('localNotice')}</p>`);break}});
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.deleteLetter){void deleteAdminLetter(b);return}if(b.dataset.adminPage){void adminLetters(Number(b.dataset.adminPage));return}if(b.dataset.auth){const form=$('#account-form');if(form.querySelector('[type=submit]').disabled)return;form.dataset.action=b.dataset.auth;document.querySelectorAll('[data-auth]').forEach(tab=>tab.setAttribute('aria-pressed',String(tab===b)));form.querySelector('[type=submit]').textContent=b.textContent;$('#account-password').autocomplete=b.dataset.auth==='register'?'new-password':'current-password';$('#account-error').textContent='';return}if(b.dataset.nav){view=b.dataset.nav;render();return}if(b.dataset.locationLetter){close();select(b.dataset.locationLetter);return}if(b.dataset.select){select(b.dataset.select);return}if(b.dataset.read){openLetter(b.dataset.read,true);return}if(b.dataset.filter){filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(el=>{el.classList.toggle('active',el===b);el.setAttribute('aria-pressed',el===b?'true':'false')});refresh();return}switch(b.id){case'list-toggle':listMode=!listMode;render();break;case'approach':if(watch===null)startGPS();break;case'unlock':if(unlocked(current()))openLetter(current().id);break;case'locate':position?maps.panTo(position):startGPS();break;case'connect-shortcut':connect();break;case'walking-route':void routeToSelected();break;case'toggle-terrain':void changeTerrain(b);break;case'retry-map':close();connect();break;case'suggest-letter':void suggestLetter(b);break;case'apply-suggestion':applySuggestion();break;case'import-letters':void importLetters(b);break;case'admin-letters':void adminLetters();break;case'account-settings':accountSettings();break;case'account-logout':b.disabled=true;api('logout',{}).then(()=>loadAccount(null)).then(()=>{close();render()}).catch(()=>{b.disabled=false;toast(lang==='vi'?'Chưa đăng xuất được.':'Could not sign out.')});break;case'map-settings':case'settings-map':settings();break;case'close-modal':close();break;case'react':if(write('reaction.'+b.dataset.id,true)){toast(t('reacted'));b.disabled=true}else toast(t('storageError'));break;case'keep':{const next=[...new Set([...saved,b.dataset.id])];if(write('saved',next)){saved=next;b.disabled=true;b.innerHTML=icon('check')+' '+t('kept');toast(t('kept'))}else toast(t('storageError'));break}case'privacy':modal(`<div class="eyebrow">MIDNIGHT</div><h2>${t('privacy')}</h2><p>${t('privacyText')}</p><p>${lang==='vi'?'Khi bạn bấm Đi bộ, tọa độ điểm đi và điểm đến được gửi đến dịch vụ Valhalla để tính tuyến.':'When you tap Walk, the start and destination coordinates are sent to Valhalla to calculate the route.'}</p>`);break;case'about':modal(`<div class="eyebrow">MIDNIGHT LETTERS</div><h2>${t('brand')}</h2><p>${t('version')}</p><p style="margin-top:16px">${t('localNotice')}</p>`);break}});
 $('#app').addEventListener('change',e=>{if(e.target.id==='letter-place'){void updateComposeLocation(e.target.form)}if(e.target.id==='language'){lang=e.target.value;write('language',lang);render()}});
 document.addEventListener('submit',async e=>{e.preventDefault();const form=e.target;
  if(form.id==='account-form'){
