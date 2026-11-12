@@ -214,7 +214,7 @@ async function adminLetters(page=0){
   const result=await api('admin/letters?page='+page);
   if(account!==owner||view!=='profile')return;
   if(!result.letters.length&&page>0)return adminLetters(page-1);
-  const rows=result.letters.map(({letter,username})=>`<details class="local-note admin-letter"><summary>${esc(letter.title)} · @${esc(username)}</summary><p style="margin:8px 0">${esc(letter.place)} · ${esc(letter.date)}</p><p style="white-space:pre-wrap">${esc(letter.body)}</p><button class="admin-delete" data-delete-letter="${esc(letter.id)}" data-admin-page-current="${page}" data-letter-title="${esc(letter.title)}">${vi?'Xóa thư':'Delete letter'}</button></details>`).join('');
+  const rows=result.letters.map(({letter,username})=>`<article class="local-note admin-letter"><details><summary>${esc(letter.title)} · @${esc(username)}</summary><p style="margin:8px 0">${esc(letter.place)} · ${esc(letter.date)}</p><p style="white-space:pre-wrap">${esc(letter.body)}</p></details><button class="admin-delete" data-delete-letter="${esc(letter.id)}" data-admin-page-current="${page}" data-letter-title="${esc(letter.title)}">${vi?'Xóa thư':'Delete letter'}</button></article>`).join('');
   modal(`<div class="eyebrow">ADMIN</div><h2>${vi?'Tất cả thư':'All letters'}</h2>${rows||`<p>${t('empty')}</p>`}<div class="actions">${page>0?`<button class="secondary" data-admin-page="${page-1}">← ${vi?'Trang trước':'Previous'}</button>`:''}${result.more?`<button class="secondary" data-admin-page="${page+1}">${vi?'Trang sau':'Next'} →</button>`:''}</div>`);
  }catch{if(account===owner)toast(vi?'Không tải được danh sách thư quản trị.':'Could not load admin letters.')}
 }

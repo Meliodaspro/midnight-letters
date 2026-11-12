@@ -113,6 +113,6 @@
 @media(max-width:700px){.nav button[data-nav]{gap:3px}.nav button[data-nav] .nav-icon{height:25px}.nav button[data-nav] .nav-label{font-size:10px}}
 
 /* Admin moderation: destructive action stays distinct from normal navigation. */
-.admin-letter{overflow-wrap:anywhere}.admin-letter summary{cursor:pointer;font-size:13px}
+.admin-letter{overflow-wrap:anywhere}.admin-letter summary{cursor:pointer;font-size:13px}.admin-letter>.admin-delete{display:block}
 .admin-delete{margin-top:14px;min-height:44px;padding:10px 18px;border:1px solid #f6a19c66;border-radius:12px;background:#9d343533;color:#ffc1ba;font:inherit;cursor:pointer}
 .admin-delete:hover{background:#9d343566}.admin-delete:focus-visible{outline:2px solid #ffc1ba;outline-offset:3px}.admin-delete:disabled{opacity:.5;cursor:wait}
