@@ -21,7 +21,7 @@ await cp('src','dist/src',{recursive:true});
 // caches can otherwise keep an old moderation module behind the new app.
 for(const [file,data] of sources){
  if(!file.endsWith('.js'))continue;
- const code=data.toString().replace(/(\bfrom\s*|\bimport\s*)(['"])(\.{1,2}\/[^'"\n]+\.js)\2/g,(_,prefix,quote,path)=>`${prefix}${quote}${path}?v=${version}${quote}`);
+ const code=data.toString().replace(/(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.{1,2}\/[^'"\n]+\.js)\2/g,(_,prefix,quote,path)=>`${prefix}${quote}${path}?v=${version}${quote}`);
  await writeFile(join('dist',file),code);
 }
 await writeFile('dist/index.html',html.replace(/(\/src\/(?:app\.js|styles\.css))(?=["'])/g,`$1?v=${version}`));

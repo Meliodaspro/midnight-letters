@@ -59,3 +59,14 @@ Không có APK/IPA hoặc dự án native được build trong bản này. Xem [
 Khi lưu/nhập thư, ứng dụng gửi nội dung và tọa độ đặt thư lên máy chủ tài khoản. Admin có thể xem và xóa thư đã lưu. Khi bấm gợi ý AI, máy chủ gửi chủ đề và ngôn ngữ cho Gemini; không gửi mật khẩu hay toàn bộ kho thư. Khi dùng Google Maps, Google nhận các yêu cầu bản đồ. GPS chỉ bật sau thao tác người dùng và dừng khi chuyển app sang nền. Chỉ đặt thư tại nơi công cộng, an toàn, được phép tiếp cận.
 
 Font Noto: xem `public/fonts/LICENSE.txt`. Mã ứng dụng chưa cấp giấy phép phân phối công khai.
+
+
+## Midnight Atlas
+
+Khám phá mở bằng Trái Đất tương tác: kéo để xoay, +/− để đổi kích thước, chọn cụm thư để đến bản đồ đường phố hiện có (MapLibre / OpenFreeMap). Không thêm thư mẫu hoặc đổi điều kiện GPS. Khi chưa có thư, Trái Đất không hiển thị ghim giả. Các chức năng tài khoản, quản trị, lọc nội dung, địa hình và tuyến đi bộ được giữ nguyên.
+
+Three.js r160 và ảnh Trái Đất 2K được lưu cùng ứng dụng (~0.9 MB), không cần CDN cho chế độ toàn cầu. Chỉ vẽ lại khi tương tác, dừng khi ẩn trang hoặc chuyển màn hình; giới hạn pixel ratio trên điện thoại. Thiết bị không có WebGL dùng bản Canvas nhẹ và có nhãn rõ ràng. Đây là góc nhìn toàn cầu; độ chính xác tìm thư dùng bản đồ đường phố và GPS.
+
+Nguồn và giấy phép ảnh: `/credits.html`. Solar System Scope, CC BY 4.0; ảnh đã được dev-Armaan/satellites thu nhỏ và chuyển mã. Không tích hợp dịch vụ theo dõi vệ tinh hoặc thương hiệu Watched.
+
+Kiểm tra gồm tọa độ/quy chiếu ảnh, gom cụm qua kinh tuyến 180°, các kiểm tra sẵn có và giao diện desktop/390×844. Trình duyệt kiểm thử tắt WebGL nên chỉ xác minh trực quan được bản Canvas dự phòng; bản WebGL cần kiểm tra thêm trên thiết bị thật. Bản demo tĩnh không cung cấp API tài khoản; khi tự host cần giữ dịch vụ Node/SQLite hiện có.

@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {globePoint,clusterLetters} from '../src/core/globe-math.js';
+test('sphere coordinates align Greenwich, east and poles to texture UVs',()=>{const cases=[[0,0,[1,0,0]],[0,90,[0,0,-1]],[90,0,[0,1,0]],[0,180,[-1,0,0]]];for(const [lat,lng,expected] of cases)globePoint(lat,lng).forEach((v,i)=>assert.ok(Math.abs(v-expected[i])<1e-9))});
+test('nearby letters cluster, including across the antimeridian, but distant places stay separate',()=>{const data=[{id:'a',lat:21,lng:105},{id:'b',lat:21.01,lng:105.02},{id:'c',lat:0,lng:179.6},{id:'d',lat:0,lng:-179.6},{id:'e',lat:48,lng:2}];assert.deepEqual(clusterLetters(data).map(g=>g.letters.map(l=>l.id)),[['a','b'],['c','d'],['e']])});
