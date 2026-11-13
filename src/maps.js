@@ -1,10 +1,16 @@
-import {seeds} from './core/seed.js';
+import {atlasStyle,atlasFlight,atlasView,DEFAULT_PLACE} from './core/atlas.js';
 import {distanceMeters} from './core/location.js';
 const STYLE_URL='https://tiles.openfreemap.org/styles/liberty';
 const DEFAULT_PITCH=38;
-const CDN='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/';
+const CDN='/vendor/maplibre/';
 let sdk, instance, pending, resizeObserver, userMarker;
-let markers=[];
+let markers=[],mapCallbacks={},worldHandlers=false;
+export function supportsAtlas(){try{const canvas=document.createElement('canvas');const gl=canvas.getContext('webgl2');if(!gl)return false;gl.getExtension('WEBGL_lose_context')?.loseContext();return true}catch{return false}}
+const reduced=()=>globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+export function flyOverview(){if(instance)instance.flyTo(atlasFlight({lat:instance.getCenter().lat,lng:instance.getCenter().lng},true,reduced()))}
+export function flyGround(place){if(instance){const center=instance.getCenter();instance.flyTo(atlasFlight(place||{lat:center.lat,lng:center.lng},false,reduced()))}}
+export function zoomBy(delta){instance?.zoomTo(Math.max(0,Math.min(19,instance.getZoom()+delta)),{duration:reduced()?0:450})}
+export function isOverview(){return !instance||atlasView(instance.getZoom())==='globe'}
 
 export function hasMap(){return !!instance}
 
@@ -70,25 +76,25 @@ function pastelStyle(style){
  return style;
 }
 
-export async function connectMap(container,letters,onSelect){
+export async function connectMap(container,letters,onSelect,callbacks={}){
+ mapCallbacks=callbacks;
+ if(!supportsAtlas())throw Error('webgl_unavailable');
  if(instance)return instance;
  if(!pending)pending=(async()=>{
   const [lib,response]=await Promise.all([loadSDK(),fetch(STYLE_URL,{signal:AbortSignal.timeout(15000)})]);
   if(!response.ok)throw Error('Map style unavailable');
-  const style=pastelStyle(await response.json());
-  const map=new lib.Map({container,style,center:[105.8525,21.0285],zoom:15.8,pitch:DEFAULT_PITCH,bearing:-18,maxPitch:65});
+  const style=atlasStyle(pastelStyle(await response.json()),location.origin);
+  const map=new lib.Map({container,style,center:[105.8525,21.0285],zoom:1.2,pitch:0,bearing:0,maxPitch:65,maxZoom:19,renderWorldCopies:false,canvasContextAttributes:{antialias:true,powerPreference:'low-power'}});
   try{
    await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{map.off('load',loaded);reject(Error('Map timed out'))},20000);
     function loaded(){clearTimeout(timer);resolve()}
     map.once('load',loaded);
    });
-   let overview=map.getZoom()<12;
-   map.on('zoomend',()=>{
-    const zoom=map.getZoom();
-    if(!overview&&zoom<12){overview=true;map.easeTo({pitch:0,duration:300})}
-    else if(overview&&zoom>=14){overview=false;map.easeTo({pitch:DEFAULT_PITCH,duration:300})}
-   });
+   const syncView=()=>{const overview=atlasView(map.getZoom())==='globe';markers.forEach(marker=>{marker.getElement().hidden=overview});mapCallbacks.onView?.(overview?'globe':'street')};
+   map.on('zoom',syncView);
+   map.on('zoomend',()=>{if(map.getZoom()<6&&map.getPitch()>0)map.easeTo({pitch:0,duration:reduced()?0:300})});
+   map.on('webglcontextlost',()=>{resizeObserver?.disconnect();instance=null;worldHandlers=false;map.remove();mapCallbacks.onError?.('webgl_unavailable')});
    map.addControl(new lib.NavigationControl({visualizePitch:true}),'bottom-right');
    let width=container.clientWidth,height=container.clientHeight;
    resizeObserver=new ResizeObserver(()=>{
@@ -100,7 +106,8 @@ export async function connectMap(container,letters,onSelect){
    resizeObserver.observe(container);
    instance=map;
    refreshMarkers(letters,onSelect);
-   addPets(map,letters.length?letters:seeds);
+   addPets(map,letters);
+   syncView();
    return map;
   }catch(error){
    resizeObserver?.disconnect();
@@ -122,8 +129,19 @@ export function groupLettersByPlace(letters){
  return groups;
 }
 
+function refreshWorldLetters(letters,onSelect){
+ const features=letters.map(letter=>({type:'Feature',properties:{id:letter.id},geometry:{type:'Point',coordinates:[letter.lng,letter.lat]}}));
+ const source=instance.getSource('midnight-letter-world');
+ if(source){source.setData({type:'FeatureCollection',features});return}
+ if(!features.length)return;
+ instance.addSource('midnight-letter-world',{type:'geojson',data:{type:'FeatureCollection',features},cluster:true,clusterRadius:60,clusterMaxZoom:6});
+ instance.addLayer({id:'midnight-letter-world-dot',type:'circle',source:'midnight-letter-world',maxzoom:6,paint:{'circle-radius':['case',['has','point_count'],15,8],'circle-color':'#e2c18b','circle-stroke-color':'#18252d','circle-stroke-width':2}});
+ instance.addLayer({id:'midnight-letter-world-count',type:'symbol',source:'midnight-letter-world',maxzoom:6,filter:['has','point_count'],layout:{'text-field':['to-string',['get','point_count_abbreviated']],'text-font':['Noto Sans Regular'],'text-size':11},paint:{'text-color':'#18252d'}});
+ if(!worldHandlers){worldHandlers=true;instance.on('click','midnight-letter-world-dot',async event=>{const feature=event.features?.[0];if(!feature)return;if(feature.properties.cluster){try{const zoom=await instance.getSource('midnight-letter-world').getClusterExpansionZoom(feature.properties.cluster_id);instance.flyTo({center:feature.geometry.coordinates,zoom:Math.max(6.2,zoom),pitch:0,duration:reduced()?0:2500})}catch{}}else onSelect([feature.properties.id])});}
+}
 export function refreshMarkers(letters,onSelect){
  if(!instance)return;
+ refreshWorldLetters(letters,onSelect);
  markers.forEach(marker=>marker.remove());
  markers=groupLettersByPlace(letters).map(group=>{
   const [letter]=group;
@@ -140,11 +158,11 @@ export function refreshMarkers(letters,onSelect){
    const vi=document.documentElement.lang==='vi';
    button.setAttribute('aria-label',vi?group.length+' lá thư · '+letter.place:group.length+' letters · '+letter.place);
   }
-  button.addEventListener('click',()=>onSelect(group.map(item=>item.id)));
+  button.hidden=isOverview();button.addEventListener('click',()=>onSelect(group.map(item=>item.id)));
   return new globalThis.maplibregl.Marker({element:button}).setLngLat([letter.lng,letter.lat]).addTo(instance);
  });
 }
-export function panTo(position){instance?.easeTo({center:[position.lng,position.lat],duration:500})}
+export function panTo(position){flyGround(position)}
 export function showPosition(position){
  if(!instance)return;
  if(!userMarker){
@@ -156,7 +174,7 @@ export function showPosition(position){
   element.append(label);
   userMarker=new globalThis.maplibregl.Marker({element});
   userMarker.setLngLat([position.lng,position.lat]).addTo(instance);
-  instance.easeTo({center:[position.lng,position.lat],zoom:Math.max(instance.getZoom(),15),duration:650});
+  flyGround(position);
  }
  userMarker.setLngLat([position.lng,position.lat]);
 }
