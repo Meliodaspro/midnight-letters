@@ -1,15 +1,24 @@
 import {atlasStyle,atlasFlight,atlasView,DEFAULT_PLACE} from './core/atlas.js';
+import {fitGlobeCamera,hybridOpacity} from './core/hybrid-camera.js';
 import {distanceMeters} from './core/location.js';
 const STYLE_URL='https://tiles.openfreemap.org/styles/liberty';
 const DEFAULT_PITCH=38;
 const CDN='/vendor/maplibre/';
 let sdk, instance, pending, resizeObserver, userMarker;
-let markers=[],mapCallbacks={},worldHandlers=false;
+let markers=[],mapCallbacks={},worldHandlers=false,mapContainer,lastCamera=null,lastCameraKey='',navigation=0;
 export function supportsAtlas(){try{const canvas=document.createElement('canvas');const gl=canvas.getContext('webgl2');if(!gl)return false;gl.getExtension('WEBGL_lose_context')?.loseContext();return true}catch{return false}}
 const reduced=()=>globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
-export function flyOverview(){if(instance)instance.flyTo(atlasFlight({lat:instance.getCenter().lat,lng:instance.getCenter().lng},true,reduced()))}
-export function flyGround(place){if(instance){const center=instance.getCenter();instance.flyTo(atlasFlight(place||{lat:center.lat,lng:center.lng},false,reduced()))}}
-export function zoomBy(delta){instance?.zoomTo(Math.max(0,Math.min(19,instance.getZoom()+delta)),{duration:reduced()?0:450})}
+export function flyOverview(){if(!instance)return;const token=++navigation;const fly=()=>{if(instance&&token===navigation)instance.flyTo(atlasFlight({lat:instance.getCenter().lat,lng:instance.getCenter().lng},true,reduced()))};if(instance.getPitch()>.1){instance.once('moveend',fly);instance.easeTo({pitch:0,bearing:0,duration:reduced()?0:350})}else fly()}
+export function flyGround(place){if(!instance)return;const center=instance.getCenter(),flight=atlasFlight(place||{lat:center.lat,lng:center.lng},false,reduced()),token=++navigation;
+ instance.once('moveend',()=>{if(!instance||token!==navigation||instance.getZoom()<14)return;const c=instance.getCenter();if(Math.abs(c.lat-flight.center[1])>.02||Math.abs(((c.lng-flight.center[0]+540)%360)-180)>.02)return;instance.easeTo({pitch:48,duration:reduced()?0:650})});
+ instance.flyTo({...flight,pitch:0,bearing:0});}
+export function zoomBy(delta){navigation++;instance?.zoomTo(Math.max(0,Math.min(19,instance.getZoom()+delta)),{duration:reduced()?0:450})}
+export function getCamera(){if(!instance||!mapContainer)return null;
+ const center=instance.getCenter(),zoom=instance.getZoom(),pitch=instance.getPitch(),bearing=instance.getBearing?.()||0,width=mapContainer.clientWidth,height=mapContainer.clientHeight;
+ const key=[center.lat,center.lng,zoom,pitch,bearing,width,height].join('/');if(lastCamera&&key===lastCameraKey)return lastCamera;
+ const camera=hybridOpacity(zoom,pitch)>0?fitGlobeCamera(p=>instance.project([p.lng,p.lat]),center,bearing,width,height):null;
+ lastCamera={zoom,pitch,center:{lat:center.lat,lng:center.lng},camera,opacity:camera?hybridOpacity(zoom,pitch):0};lastCameraKey=key;return lastCamera;
+}
 export function isOverview(){return !instance||atlasView(instance.getZoom())==='globe'}
 
 export function hasMap(){return !!instance}
@@ -77,7 +86,7 @@ function pastelStyle(style){
 }
 
 export async function connectMap(container,letters,onSelect,callbacks={}){
- mapCallbacks=callbacks;
+ mapCallbacks=callbacks;mapContainer=container;
  if(!supportsAtlas())throw Error('webgl_unavailable');
  if(instance)return instance;
  if(!pending)pending=(async()=>{
@@ -93,8 +102,9 @@ export async function connectMap(container,letters,onSelect,callbacks={}){
    });
    const syncView=()=>{const overview=atlasView(map.getZoom())==='globe';markers.forEach(marker=>{marker.getElement().hidden=overview});mapCallbacks.onView?.(overview?'globe':'street')};
    map.on('zoom',syncView);
+   let sentCamera;map.on('render',()=>{const snapshot=getCamera();if(snapshot&&snapshot!==sentCamera){sentCamera=snapshot;mapCallbacks.onCamera?.(snapshot)}});
    map.on('zoomend',()=>{if(map.getZoom()<6&&map.getPitch()>0)map.easeTo({pitch:0,duration:reduced()?0:300})});
-   map.on('webglcontextlost',()=>{resizeObserver?.disconnect();instance=null;worldHandlers=false;map.remove();mapCallbacks.onError?.('webgl_unavailable')});
+   map.on('webglcontextlost',()=>{resizeObserver?.disconnect();instance=null;worldHandlers=false;lastCamera=null;lastCameraKey='';map.remove();mapCallbacks.onError?.('webgl_unavailable')});
    map.addControl(new lib.NavigationControl({visualizePitch:true}),'bottom-right');
    let width=container.clientWidth,height=container.clientHeight;
    resizeObserver=new ResizeObserver(()=>{

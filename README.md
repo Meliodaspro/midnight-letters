@@ -32,11 +32,11 @@ npm test
 
 Dùng MapLibre GL JS 5.6.2 (BSD-3-Clause) và OpenFreeMap/OpenStreetMap, không cần API key, tài khoản bản đồ hay billing. SDK được lưu cùng ứng dụng trong `public/vendor/maplibre`. Dữ liệu đường phố cần kết nối tới `tiles.openfreemap.org` và các máy chủ font/sprite được khai báo trong style của dịch vụ. Giữ phần ghi nguồn trên bản đồ.
 
-Khám phá dùng **một canvas và một camera** từ toàn cầu xuống đường phố. Cuộn/chụm hai ngón để zoom, bấm Khám phá mặt đất để bay tới thư đang chọn, vị trí GPS hoặc tâm bản đồ; bấm Trái Đất để trở lại toàn cầu. Góc nhìn globe tự chuyển dần sang mặt phẳng khi zoom gần. Các khối tòa nhà xuất hiện ở nơi OpenStreetMap có dữ liệu, không phải mô hình nhà chụp ảnh như Google Earth.
+Khám phá giữ **một bản đồ MapLibre xuyên suốt** từ toàn cầu xuống đường phố; lớp Trái Đất Three.js ở góc nhìn xa dùng camera đồng bộ và chuyển độ mờ với bản đồ. Cuộn/chụm hai ngón để zoom, bấm Khám phá mặt đất để bay tới thư đang chọn, vị trí GPS hoặc tâm bản đồ; bấm Trái Đất để trở lại toàn cầu. Góc nhìn globe tự chuyển dần sang mặt phẳng khi zoom gần. Các khối tòa nhà xuất hiện ở nơi OpenStreetMap có dữ liệu, không phải mô hình nhà chụp ảnh như Google Earth.
 
 Ở xa, app dùng 21 tile Trái Đất có mây được lưu sẵn (zoom 0–2). Ảnh được chuyển dần sang bản đồ vector ở zoom 3–5.5, không phóng ảnh bề mặt mờ xuống tận đường phố. Đây là ảnh toàn cầu và bản đồ đường phố, không phải ảnh vệ tinh độ phân giải cao mọi cấp zoom. Ảnh ngày và mây tĩnh, không thể hiện thời tiết trực tiếp.
 
-Cần WebGL 2 để dùng bản đồ liền mạch. Nếu thiếu WebGL hoặc mất mạng/dữ liệu bản đồ, app hiện thông báo và nút thử lại; góc nhìn nhẹ chỉ xem quả cầu, không giả lập khả năng zoom tới mặt đất. SDK cũ và shader Watched vẫn được lưu cho chế độ dự phòng; bản đồ chính dùng MapLibre.
+Cần WebGL 2 để dùng bản đồ liền mạch. Nếu thiếu WebGL hoặc mất mạng/dữ liệu bản đồ, app hiện thông báo và nút thử lại; góc nhìn nhẹ chỉ xem quả cầu, không giả lập khả năng zoom tới mặt đất. MapLibre điều khiển camera và dữ liệu đường phố; shader Watched vẫn được dùng trực tiếp khi nhìn toàn cầu trên thiết bị hỗ trợ WebGL 2.
 
 Chức năng địa hình và tuyến đi bộ hiện có được giữ nguyên, dùng các nguồn mở đã cấu hình. Dùng HTTPS để kiểm tra GPS trên điện thoại. Không thay đổi database hay điều kiện mở thư.
 
@@ -76,3 +76,14 @@ Font Noto: xem `public/fonts/LICENSE.txt`. Mã ứng dụng chưa cấp giấy p
 - `npm test`: điều kiện mở thư, ngôn ngữ, quản trị/lọc nội dung, tọa độ/hướng Mặt Trời và kiểm tra Atlas. Kiểm tra adapter xác nhận chỉ tạo một map khi chuyển từ toàn cầu xuống địa điểm và quay lại, bằng SDK giả lập; không thay thế việc kiểm tra dựng GPU.
 
 Trình duyệt kiểm thử tắt WebGL 2 nên chưa xác minh trực quan được chuyến bay và các tile vector trên GPU. Đã kiểm tra giao diện dự phòng desktop/điện thoại; cần kiểm tra tiếp trên trình duyệt có tăng tốc phần cứng.
+
+
+## Giữ hiệu ứng Trái Đất khi zoom xuống đường phố
+
+Lớp Three.js/WebGL dùng lại bộ shader Watched ở góc nhìn xa: bề mặt 4K trên desktop (2K trên điện thoại), bóng mây, relief, phản sáng biển, đèn thành phố, hoàng hôn và khí quyển. Mặt Trời theo thời gian thực; mây vẫn là dữ liệu tĩnh. Đây là lớp chính của góc nhìn toàn cầu, không chỉ dành cho dự phòng.
+
+Camera được khớp với kết quả `map.project()` qua `src/core/hybrid-camera.js`: cùng tâm, hướng, tỷ lệ, phối cảnh và kích thước viewport. MapLibre nhận thao tác chuột/cảm ứng; renderer Trái Đất chỉ theo camera. Lớp hiệu ứng mờ dần ở zoom 1.8–2.8 để lộ bản đồ bên dưới và hiện lại khi zoom ra. Khi bay xuống, camera giữ thẳng cho đến khi tới gần, rồi mới nghiêng; khi quay ra toàn cầu, camera được làm phẳng trước. Nếu đang nghiêng hoặc phép chiếu không khớp dạng cầu, lớp ảnh được ẩn để tránh chồng sai vị trí.
+
+Chỉ lớp đang nhìn thấy được vẽ; renderer Trái Đất dừng khi zoom gần, đổi tab hoặc chuyển màn hình. Khi shader/tài nguyên lỗi, bản đồ vẫn dùng được và có thông báo giảm hiệu ứng. Khi thiếu WebGL 2 hoàn toàn thì dùng bản xem nhẹ như mô tả ở trên.
+
+Kiểm tra bổ sung xác nhận phép khớp camera ở nhiều vĩ độ, qua kinh tuyến 180°, có góc xoay và độ lệch màn hình; chiều mờ dần/hiện lại và việc từ chối phép chiếu sai. Các kiểm tra toán học/adapter không thay thế kiểm tra GPU thực tế: môi trường browser hiện tắt WebGL 2, nên chưa xác minh trực quan được toàn bộ chuyển cảnh trên GPU.

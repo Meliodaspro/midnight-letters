@@ -5,14 +5,14 @@ import {atmosphereVertex,atmosphereFragment} from './earth-shaders/atmosphere.js
 import {sunDirection} from './core/sun.js';
 import {globePoint,clusterLetters} from './core/globe-math.js';
 // Render on demand: no perpetual rotation or background animation.
-async function createWebGLGlobe(host,{letters,onCluster,onError,labels}){
+async function createWebGLGlobe(host,{letters,onCluster,onError,labels,externalCamera=false}){
  const mobile=matchMedia('(pointer:coarse)').matches||innerWidth<701;
  const canvasEl=document.createElement('canvas');const context=canvasEl.getContext('webgl2',{alpha:true,antialias:!mobile,powerPreference:'low-power'});if(!context)throw Error('WebGL 2 unavailable');
  const renderer=new THREE.WebGLRenderer({canvas:canvasEl,context,alpha:true,antialias:!mobile,powerPreference:'low-power'});renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;renderer.debug.onShaderError=(gl,program)=>{throw Error('Earth shader: '+gl.getProgramInfoLog(program))};
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.5:2));renderer.outputColorSpace=THREE.SRGBColorSpace;
  renderer.domElement.setAttribute('aria-hidden','true');host.append(renderer.domElement);
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,1,.1,100),earth=new THREE.Group();scene.add(earth);
- let yaw=105.85,pitch=21.03,radius=3.6,target={yaw,pitch,radius},frame=0,enabled=true,disposed=false,groups=[],pins=[],position=null;
+ let yaw=105.85,pitch=21.03,radius=3.6,target={yaw,pitch,radius},frame=0,enabled=true,disposed=false,groups=[],pins=[],position=null,sharedCamera=null;
  const reduced=matchMedia('(prefers-reduced-motion:reduce)');
  const geometry=new THREE.SphereGeometry(1,mobile?128:192,mobile?64:96);
  // Upstream Earth/cloud/atmosphere GLSL, with image-paint uniforms disabled.
@@ -35,7 +35,15 @@ async function createWebGLGlobe(host,{letters,onCluster,onError,labels}){
  function rebuild(data){groups=clusterLetters(data);pins.forEach(p=>p.remove());pins=groups.map(g=>{const b=document.createElement('button');b.className='globe-pin';b.addEventListener('click',()=>onCluster(g.letters[0].id));host.append(b);return b});setLabels(labels);request()}
  function setLabels(value){labels=value;pins.forEach((b,i)=>{b.textContent='✉ '+groups[i].letters.length+' '+labels.letters;b.setAttribute('aria-label',labels.cluster+' · '+groups[i].letters.length+' '+labels.letters)})}
  function project(el,lat,lng){const p=new THREE.Vector3(...globePoint(lat,lng,1.025));const visible=p.dot(camera.position)>1.04;p.project(camera);el.hidden=!visible;if(visible){el.style.left=(p.x+1)*host.clientWidth/2+'px';el.style.top=(1-p.y)*host.clientHeight/2+'px'}}
- function render(){frame=0;if(disposed||!enabled||document.hidden||!host.clientWidth||!host.clientHeight)return;sun.value.set(...sunDirection(Date.now()));let moving=false;for(const key of ['yaw','pitch','radius']){let value=key==='yaw'?yaw:key==='pitch'?pitch:radius;let delta=target[key]-value;if(key==='yaw')delta=((delta+540)%360)-180;const next=reduced.matches?value+delta:value+delta*.14;if(Math.abs(delta)>.001)moving=true;if(key==='yaw')yaw=next;else if(key==='pitch')pitch=next;else radius=next}camera.position.set(...globePoint(pitch,yaw,radius));camera.lookAt(0,0,0);camera.updateMatrixWorld();renderer.render(scene,camera);pins.forEach((p,i)=>project(p,groups[i].lat,groups[i].lng));if(position)project(user,position.lat,position.lng);else user.hidden=true;if(moving)request()}
+ function render(){frame=0;if(disposed||!enabled||document.hidden||!host.clientWidth||!host.clientHeight)return;sun.value.set(...sunDirection(Date.now()));let moving=false;
+ if(externalCamera){
+  if(!sharedCamera)return;
+  const c=sharedCamera;camera.position.set(...c.position);camera.up.set(...c.up);camera.near=Math.max(.0001,Math.min(.1,(c.distance-1)*.25));camera.aspect=c.width/c.height;camera.fov=c.fov;
+  camera.setViewOffset(c.width,c.height,c.offsetX,c.offsetY,c.width,c.height);camera.lookAt(0,0,0);camera.updateProjectionMatrix();
+ }else{
+  for(const key of ['yaw','pitch','radius']){let value=key==='yaw'?yaw:key==='pitch'?pitch:radius;let delta=target[key]-value;if(key==='yaw')delta=((delta+540)%360)-180;const next=reduced.matches?value+delta:value+delta*.14;if(Math.abs(delta)>.001)moving=true;if(key==='yaw')yaw=next;else if(key==='pitch')pitch=next;else radius=next}camera.position.set(...globePoint(pitch,yaw,radius));camera.lookAt(0,0,0);
+ }
+ camera.updateMatrixWorld();renderer.render(scene,camera);pins.forEach((p,i)=>project(p,groups[i].lat,groups[i].lng));if(position)project(user,position.lat,position.lng);else user.hidden=true;if(moving)request()}
  function request(){if(!frame&&enabled&&!disposed&&!document.hidden)frame=requestAnimationFrame(render)}
  function resize(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.fov=2*Math.atan(Math.tan(17.5*Math.PI/180)/Math.min(1,camera.aspect))*180/Math.PI;camera.updateProjectionMatrix();request()}
  const observer=new ResizeObserver(resize);observer.observe(host);
@@ -49,7 +57,7 @@ async function createWebGLGlobe(host,{letters,onCluster,onError,labels}){
  const sunlightTimer=setInterval(request,60000);
  rebuild(letters);resize();
  try{camera.position.set(...globePoint(pitch,yaw,radius));camera.lookAt(0,0,0);camera.updateMatrixWorld();renderer.compile(scene,camera);renderer.render(scene,camera)}catch(error){clearInterval(sunlightTimer);cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('visibilitychange',visibility);geometry.dispose();material.dispose();cloudMaterial.dispose();atmosphere.dispose();textures.forEach(t=>t.dispose());renderer.dispose();host.replaceChildren();throw error}
- return {setLabels,updateLetters:rebuild,setPosition(p){position=p;request()},flyTo(p){target.yaw=p.lng;target.pitch=p.lat;request()},zoom(delta){target.radius=Math.max(2.1,Math.min(5,target.radius+delta));request()},setActive(active){enabled=active;if(!active){cancelAnimationFrame(frame);frame=0}else{resize();request()}},dispose(){disposed=true;clearInterval(sunlightTimer);cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('visibilitychange',visibility);geometry.dispose();material.dispose();cloudMaterial.dispose();atmosphere.dispose();starsGeo.dispose();starsMat.dispose();textures.forEach(t=>t.dispose());renderer.dispose();host.replaceChildren()}};
+ return {externalCamera,syncCamera(snapshot){sharedCamera=snapshot;if(externalCamera&&enabled){cancelAnimationFrame(frame);frame=0;render()}},setLabels,updateLetters:rebuild,setPosition(p){position=p;request()},flyTo(p){target.yaw=p.lng;target.pitch=p.lat;request()},zoom(delta){target.radius=Math.max(2.1,Math.min(5,target.radius+delta));request()},setActive(active){if(enabled===active)return;enabled=active;if(!active){cancelAnimationFrame(frame);frame=0}else{resize();request()}},dispose(){disposed=true;clearInterval(sunlightTimer);cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('visibilitychange',visibility);geometry.dispose();material.dispose();cloudMaterial.dispose();atmosphere.dispose();starsGeo.dispose();starsMat.dispose();textures.forEach(t=>t.dispose());renderer.dispose();host.replaceChildren()}};
 }
 
-export async function createGlobe(host,options){try{return await createWebGLGlobe(host,options)}catch(error){host.replaceChildren();const {createLiteGlobe}=await import("./globe-lite.js");return createLiteGlobe(host,options)}}
+export async function createGlobe(host,options){try{return await createWebGLGlobe(host,options)}catch(error){host.replaceChildren();if(options.externalCamera)throw error;const {createLiteGlobe}=await import("./globe-lite.js");return createLiteGlobe(host,options)}}
